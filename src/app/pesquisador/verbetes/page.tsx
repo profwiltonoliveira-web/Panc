@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DEMO_PLANTS } from "@/lib/demo-data";
+import { createClient } from "@/lib/supabase/server";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -8,7 +8,20 @@ const STATUS_LABEL: Record<string, string> = {
   publicado: "Publicado"
 };
 
-export default function MeusVerbetesPage() {
+export default async function MeusVerbetesPage() {
+  const supabase = createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  const { data: verbetes } = await supabase
+    .from("plants")
+    .select("id, nome_destaque, status, atualizado_em")
+    .eq("autor_id", user?.id ?? "")
+    .order("atualizado_em", { ascending: false });
+
+  const lista = verbetes ?? [];
+
   return (
     <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
       <div className="flex items-center justify-between">
@@ -27,9 +40,9 @@ export default function MeusVerbetesPage() {
           </tr>
         </thead>
         <tbody>
-          {DEMO_PLANTS.map((p) => (
+          {lista.map((p) => (
             <tr key={p.id} className="border-b border-line/60">
-              <td className="py-3 text-ink">{p.nomeDestaque}</td>
+              <td className="py-3 text-ink">{p.nome_destaque}</td>
               <td className="py-3">
                 <span className="font-mono text-[11px] uppercase tracking-widest text-moss border border-moss/40 px-2 py-0.5 rounded-sm">
                   {STATUS_LABEL[p.status]}
@@ -44,6 +57,12 @@ export default function MeusVerbetesPage() {
           ))}
         </tbody>
       </table>
+
+      {lista.length === 0 && (
+        <p className="font-sans text-ink/50 mt-10 italic">
+          Você ainda não criou nenhum verbete.
+        </p>
+      )}
     </div>
   );
 }

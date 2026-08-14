@@ -1,15 +1,23 @@
 import Link from "next/link";
-import { DEMO_PLANTS } from "@/lib/demo-data";
+import { createClient } from "@/lib/supabase/server";
 
-// Em produção: filtrar plants WHERE autor_id = usuário autenticado (via Supabase).
-export default function PainelPesquisadorPage() {
-  const meusVerbetes = DEMO_PLANTS; // exemplo — todos os verbetes de demonstração
+export default async function PainelPesquisadorPage() {
+  const supabase = createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
 
+  const { data: verbetes } = await supabase
+    .from("plants")
+    .select("status")
+    .eq("autor_id", user?.id ?? "");
+
+  const lista = verbetes ?? [];
   const contagem = {
-    rascunho: meusVerbetes.filter((p) => p.status === "rascunho").length,
-    em_revisao: meusVerbetes.filter((p) => p.status === "em_revisao").length,
-    aprovado: meusVerbetes.filter((p) => p.status === "aprovado").length,
-    publicado: meusVerbetes.filter((p) => p.status === "publicado").length
+    rascunho: lista.filter((p) => p.status === "rascunho").length,
+    em_revisao: lista.filter((p) => p.status === "em_revisao").length,
+    aprovado: lista.filter((p) => p.status === "aprovado").length,
+    publicado: lista.filter((p) => p.status === "publicado").length
   };
 
   return (

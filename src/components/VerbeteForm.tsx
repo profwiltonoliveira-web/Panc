@@ -1,129 +1,156 @@
-"use client";
-
-import { useState } from "react";
 import { Plant } from "@/lib/types";
 
-// Formulário de edição/criação de verbete. Em produção, o submit chama uma
-// Server Action / Route Handler que grava em `plants` (e tabelas relacionadas)
-// via Supabase, sempre com status inicial "rascunho" — o pesquisador nunca
-// publica diretamente (ver fluxo editorial no README).
-export default function VerbeteForm({ verbete }: { verbete?: Partial<Plant> }) {
-  const [salvo, setSalvo] = useState<string | null>(null);
-
-  function handleSalvarRascunho() {
-    setSalvo("Rascunho salvo.");
-  }
-
-  function handleEnviarRevisao() {
-    setSalvo("Verbete enviado para revisão.");
-  }
+// Formulário de dados gerais + "A palavra em Itamira" de um verbete já
+// criado. O envio chama diretamente uma Server Action (salvarVerbeteCompleto)
+// que grava em `plants` e `linguistic_records` via Supabase, respeitando a
+// RLS: o pesquisador só consegue gravar enquanto o verbete estiver em
+// rascunho ou em revisão — depois de aprovado, a escrita é bloqueada pelo
+// próprio banco (ver supabase/schema.sql).
+export default function VerbeteForm({
+  plant,
+  action
+}: {
+  plant: Plant;
+  action: (formData: FormData) => void;
+}) {
+  const registro = plant.registroLinguistico;
+  const podeEditar = plant.status === "rascunho" || plant.status === "em_revisao";
 
   return (
-    <form className="space-y-8 font-sans text-sm" onSubmit={(e) => e.preventDefault()}>
-      <fieldset className="space-y-4">
+    <form action={action} className="space-y-8 font-sans text-sm">
+      <fieldset className="space-y-4" disabled={!podeEditar}>
         <legend className="font-display text-xl text-ink mb-2">Dados gerais</legend>
-        <Campo label="Nome de destaque do verbete" defaultValue={verbete?.nomeDestaque} required />
-        <Campo label="Nome científico" defaultValue={verbete?.nomeCientifico} />
-        <Campo label="Descrição curta" defaultValue={verbete?.descricaoCurta} textarea />
+        <Campo name="nome_destaque" label="Nome de destaque do verbete" defaultValue={plant.nomeDestaque} required />
+        <Campo name="nome_cientifico" label="Nome científico" defaultValue={plant.nomeCientifico} />
+        <Campo name="descricao_curta" label="Descrição curta" defaultValue={plant.descricaoCurta} textarea required />
       </fieldset>
 
-      <fieldset className="space-y-4">
+      <fieldset className="space-y-4" disabled={!podeEditar}>
         <legend className="font-display text-xl text-ink mb-2">Identificação botânica</legend>
         <div className="grid sm:grid-cols-2 gap-4">
-          <Campo label="Família" defaultValue={verbete?.familia} />
-          <Campo label="Gênero" defaultValue={verbete?.genero} />
-          <Campo label="Espécie" defaultValue={verbete?.especie} />
-          <Campo label="Hábitat" defaultValue={verbete?.habitat} />
+          <Campo name="familia" label="Família" defaultValue={plant.familia} />
+          <Campo name="genero" label="Gênero" defaultValue={plant.genero} />
+          <Campo name="especie" label="Espécie" defaultValue={plant.especie} />
+          <Campo name="habitat" label="Hábitat" defaultValue={plant.habitat} />
         </div>
-        <Campo label="Observações botânicas" textarea />
+        <Campo name="ocorrencia" label="Ocorrência" defaultValue={plant.ocorrencia} />
+        <Campo name="observacoes_botanicas" label="Observações botânicas" defaultValue={plant.observacoesBotanicas} textarea />
       </fieldset>
 
-      <fieldset className="space-y-4">
+      <fieldset className="space-y-4" disabled={!podeEditar}>
         <legend className="font-display text-xl text-ink mb-2">Uso alimentar</legend>
         <div className="grid sm:grid-cols-2 gap-4">
-          <Campo label="Parte utilizada" />
-          <Campo label="Forma de preparo" />
-          <Campo label="Forma de consumo" />
+          <Campo name="parte_utilizada" label="Parte utilizada" defaultValue={plant.parteUtilizada} />
+          <Campo name="forma_preparo" label="Forma de preparo" defaultValue={plant.formaPreparo} />
+          <Campo name="forma_consumo" label="Forma de consumo" defaultValue={plant.formaConsumo} />
         </div>
-        <Campo label="Receitas / preparações" textarea />
+        <Campo name="receitas" label="Receitas / preparações" defaultValue={plant.receitas} textarea />
+        <Campo name="observacoes_uso" label="Observações de uso" defaultValue={plant.observacoesUso} textarea />
       </fieldset>
 
-      <fieldset className="space-y-4 border border-moss/40 bg-card p-5 rounded-sm">
+      <fieldset className="space-y-4 border border-moss/40 bg-card p-5 rounded-sm" disabled={!podeEditar}>
         <legend className="font-display text-xl text-ink mb-2 px-1">A palavra em Itamira</legend>
-        <Campo label="Nome popular" />
-        <Campo label="Variações (separadas por vírgula)" />
-        <Campo label="Pronúncia" />
-        <Campo label="Significado" textarea />
-        <Campo label="Origem do nome" textarea />
-        <Campo label="Uso linguístico" textarea />
-        <Campo label="Expressões relacionadas" textarea />
-        <Campo label="Observação linguística (análise do pesquisador)" textarea />
-        <Campo label="Fonte do registro" required />
-      </fieldset>
-
-      <fieldset className="space-y-4">
-        <legend className="font-display text-xl text-ink mb-2">Fotografias</legend>
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          className="block w-full text-sm border border-dashed border-line rounded-sm p-4"
+        <Campo name="nome_popular" label="Nome popular" defaultValue={registro?.nomePopular} required />
+        <Campo
+          name="variacoes"
+          label="Variações (separadas por vírgula)"
+          defaultValue={registro?.variacoes.join(", ")}
         />
-        <p className="text-xs text-ink/50">
-          Cada fotografia poderá receber legenda, autoria, data e local do registro após o envio.
-        </p>
+        <Campo name="pronuncia" label="Pronúncia" defaultValue={registro?.pronuncia} />
+        <Campo name="significado" label="Significado" defaultValue={registro?.significado} textarea />
+        <Campo name="origem_nome" label="Origem do nome" defaultValue={registro?.origemNome} textarea />
+        <Campo name="uso_linguistico" label="Uso linguístico" defaultValue={registro?.usoLinguistico} textarea />
+        <Campo
+          name="expressoes_relacionadas"
+          label="Expressões relacionadas"
+          defaultValue={registro?.expressoesRelacionadas}
+          textarea
+        />
+        <Campo
+          name="observacao_linguistica"
+          label="Observação linguística (análise do pesquisador)"
+          defaultValue={registro?.observacaoLinguistica}
+          textarea
+        />
+        <Campo name="fonte_registro" label="Fonte do registro" defaultValue={registro?.fonteRegistro} required />
+
+        <div className="pt-3 border-t border-moss/20 space-y-3">
+          <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-moss">
+            <input
+              type="checkbox"
+              name="etimologia_nao_determinada"
+              defaultChecked={registro?.etimologia?.naoDeterminada ?? true}
+            />
+            Etimologia não determinada
+          </label>
+          <Campo name="etimologia_origem" label="Etimologia — origem" defaultValue={registro?.etimologia?.origem} />
+          <Campo
+            name="etimologia_lingua_origem"
+            label="Etimologia — língua de origem"
+            defaultValue={registro?.etimologia?.linguaOrigem}
+          />
+          <Campo
+            name="etimologia_significado"
+            label="Etimologia — significado"
+            defaultValue={registro?.etimologia?.significado}
+          />
+          <Campo name="etimologia_fonte" label="Etimologia — fonte" defaultValue={registro?.etimologia?.fonte} />
+          <Campo
+            name="etimologia_observacoes"
+            label="Etimologia — observações"
+            defaultValue={registro?.etimologia?.observacoes}
+            textarea
+          />
+        </div>
       </fieldset>
 
-      <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-line">
-        <button
-          type="button"
-          onClick={handleSalvarRascunho}
-          className="border border-ink/20 px-4 py-2 rounded-sm hover:border-clay hover:text-clay"
-        >
-          Salvar rascunho
+      {podeEditar ? (
+        <button type="submit" className="bg-moss text-paper px-4 py-2 rounded-sm hover:bg-moss-dark">
+          Salvar
         </button>
-        <button
-          type="button"
-          onClick={handleEnviarRevisao}
-          className="bg-moss text-paper px-4 py-2 rounded-sm hover:bg-moss-dark"
-        >
-          Enviar para revisão
-        </button>
-        {salvo && <span className="text-xs font-mono text-moss">{salvo}</span>}
-      </div>
+      ) : (
+        <p className="text-xs font-mono text-ink/40 uppercase tracking-widest">
+          Este verbete está {plant.status === "publicado" ? "publicado" : "aprovado"} — apenas o administrador
+          pode alterá-lo agora.
+        </p>
+      )}
     </form>
   );
 }
 
 function Campo({
+  name,
   label,
   defaultValue,
   textarea,
   required
 }: {
+  name: string;
   label: string;
   defaultValue?: string;
   textarea?: boolean;
   required?: boolean;
 }) {
-  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
     <div>
-      <label htmlFor={id} className="block text-xs font-mono uppercase tracking-widest text-moss mb-1">
+      <label htmlFor={name} className="block text-xs font-mono uppercase tracking-widest text-moss mb-1">
         {label} {required && <span className="text-clay">*</span>}
       </label>
       {textarea ? (
         <textarea
-          id={id}
+          id={name}
+          name={name}
           defaultValue={defaultValue}
           rows={3}
-          className="w-full border border-line rounded-sm px-3 py-2 bg-white focus:border-clay outline-none"
+          className="w-full border border-line rounded-sm px-3 py-2 bg-white focus:border-clay outline-none disabled:opacity-60"
         />
       ) : (
         <input
-          id={id}
+          id={name}
+          name={name}
           defaultValue={defaultValue}
-          className="w-full border border-line rounded-sm px-3 py-2 bg-white focus:border-clay outline-none"
+          required={required}
+          className="w-full border border-line rounded-sm px-3 py-2 bg-white focus:border-clay outline-none disabled:opacity-60"
         />
       )}
     </div>
