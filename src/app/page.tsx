@@ -1,10 +1,27 @@
 import Link from "next/link";
 import SearchBar from "@/components/SearchBar";
 import PlantCard from "@/components/PlantCard";
-import { getPublishedDemoPlants } from "@/lib/demo-data";
+import { createClient } from "@/lib/supabase/server";
+import { PLANT_PUBLIC_SELECT, PlantRow, mapPlantRow } from "@/lib/supabase/mappers";
+import { comUrlAssinada } from "@/lib/supabase/photo-url";
 
-export default function HomePage() {
-  const destaques = getPublishedDemoPlants().slice(0, 3);
+async function buscarDestaques() {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("plants")
+    .select(PLANT_PUBLIC_SELECT)
+    .eq("status", "publicado")
+    .order("atualizado_em", { ascending: false })
+    .limit(3);
+
+  const plantas = ((data as PlantRow[] | null) ?? []).map(mapPlantRow);
+  return Promise.all(
+    plantas.map(async (planta) => ({ ...planta, fotos: await comUrlAssinada(planta.fotos) }))
+  );
+}
+
+export default async function HomePage() {
+  const destaques = await buscarDestaques();
 
   return (
     <div>
@@ -47,14 +64,19 @@ export default function HomePage() {
               Ver dicionário completo →
             </Link>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {destaques.map((plant) => (
-              <PlantCard key={plant.id} plant={plant} />
-            ))}
-          </div>
-          <p className="mt-6 font-mono text-[11px] text-ink/40">
-            Conteúdo de demonstração exibido durante o desenvolvimento — ver aviso em /sobre.
-          </p>
+
+          {destaques.length > 0 ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {destaques.map((plant) => (
+                <PlantCard key={plant.id} plant={plant} />
+              ))}
+            </div>
+          ) : (
+            <p className="font-sans text-ink/50 italic">
+              Nenhum verbete publicado ainda. Assim que a revisão editorial
+              aprovar os primeiros verbetes, eles aparecerão aqui.
+            </p>
+          )}
         </div>
       </section>
     </div>

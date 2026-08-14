@@ -1,15 +1,33 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getDemoPlantBySlug, getPublishedDemoPlants } from "@/lib/demo-data";
+import { createClient } from "@/lib/supabase/server";
+import { PLANT_PUBLIC_SELECT, PlantRow, mapPlantRow } from "@/lib/supabase/mappers";
+import { comUrlAssinada } from "@/lib/supabase/photo-url";
 import LexicalCard from "@/components/LexicalCard";
-
-// Ao conectar ao Supabase, substitua por:
-// const { data: plant } = await supabase.from("plants").select("*, plant_photos(*), linguistic_records(*), community_knowledge(*), references(*), locations(*)").eq("slug", params.slug).eq("status", "publicado").single();
 
 type Props = { params: { slug: string } };
 
-export function generateMetadata({ params }: Props): Metadata {
-  const plant = getDemoPlantBySlug(params.slug);
+// A área pública só pode mostrar verbetes com status = 'publicado'. O filtro
+// abaixo é redundante com a policy de RLS "verbetes publicados sao publicos"
+// de propósito: mesmo que um bug futuro remova esse .eq(), a RLS no banco
+// ainda bloqueia o acesso a rascunhos, verbetes em revisão ou aprovados.
+async function buscarVerbetePublicado(slug: string) {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("plants")
+    .select(PLANT_PUBLIC_SELECT)
+    .eq("slug", slug)
+    .eq("status", "publicado")
+    .maybeSingle();
+
+  if (!data) return null;
+  const plant = mapPlantRow(data as PlantRow);
+  plant.fotos = await comUrlAssinada(plant.fotos);
+  return plant;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const plant = await buscarVerbetePublicado(params.slug);
   if (!plant) return {};
   return {
     title: plant.nomeDestaque,
@@ -23,8 +41,8 @@ export function generateMetadata({ params }: Props): Metadata {
   };
 }
 
-export default function VerbetePage({ params }: Props) {
-  const plant = getDemoPlantBySlug(params.slug);
+export default async function VerbetePage({ params }: Props) {
+  const plant = await buscarVerbetePublicado(params.slug);
   if (!plant) notFound();
 
   const fotoPrincipal = plant.fotos.find((f) => f.principal) ?? plant.fotos[0];
@@ -162,8 +180,4 @@ function Campo({ label, valor }: { label: string; valor?: string }) {
       <dd className="text-ink/80">{valor}</dd>
     </div>
   );
-}
-
-export function generateStaticParams() {
-  return getPublishedDemoPlants().map((p) => ({ slug: p.slug }));
 }

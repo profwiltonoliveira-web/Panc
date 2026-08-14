@@ -1,7 +1,9 @@
 import { Metadata } from "next";
 import SearchBar from "@/components/SearchBar";
 import PlantCard from "@/components/PlantCard";
-import { getPublishedDemoPlants } from "@/lib/demo-data";
+import { createClient } from "@/lib/supabase/server";
+import { PLANT_PUBLIC_SELECT, PlantRow, mapPlantRow } from "@/lib/supabase/mappers";
+import { comUrlAssinada } from "@/lib/supabase/photo-url";
 
 export const metadata: Metadata = {
   title: "Dicionário",
@@ -10,11 +12,23 @@ export const metadata: Metadata = {
 
 const LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
-export default function DicionarioPage() {
-  const plantas = getPublishedDemoPlants().sort((a, b) =>
-    a.nomeDestaque.localeCompare(b.nomeDestaque, "pt-BR")
+async function buscarVerbetesPublicados() {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("plants")
+    .select(PLANT_PUBLIC_SELECT)
+    .eq("status", "publicado")
+    .order("nome_destaque", { ascending: true });
+
+  const plantas = ((data as PlantRow[] | null) ?? []).map(mapPlantRow);
+  return Promise.all(
+    plantas.map(async (planta) => ({ ...planta, fotos: await comUrlAssinada(planta.fotos) }))
   );
-  const letrasDisponiveis = new Set(plantas.map((p) => p.nomeDestaque[0].toUpperCase()));
+}
+
+export default async function DicionarioPage() {
+  const plantas = await buscarVerbetesPublicados();
+  const letrasDisponiveis = new Set(plantas.map((p) => p.nomeDestaque[0]?.toUpperCase()));
 
   return (
     <div className="max-w-6xl mx-auto px-5 sm:px-8 py-12">
@@ -32,14 +46,18 @@ export default function DicionarioPage() {
       <nav aria-label="Índice alfabético" className="mt-8 flex flex-wrap gap-1 font-mono text-xs">
         {LETRAS.map((letra) => {
           const disponivel = letrasDisponiveis.has(letra);
-          return (
+          return disponivel ? (
+            <a
+              key={letra}
+              href={`#letra-${letra}`}
+              className="w-7 h-7 flex items-center justify-center border rounded-sm border-moss text-moss hover:bg-moss hover:text-paper cursor-pointer"
+            >
+              {letra}
+            </a>
+          ) : (
             <span
               key={letra}
-              className={`w-7 h-7 flex items-center justify-center border rounded-sm ${
-                disponivel
-                  ? "border-moss text-moss hover:bg-moss hover:text-paper cursor-pointer"
-                  : "border-line text-ink/25"
-              }`}
+              className="w-7 h-7 flex items-center justify-center border rounded-sm border-line text-ink/25"
             >
               {letra}
             </span>
@@ -48,9 +66,15 @@ export default function DicionarioPage() {
       </nav>
 
       <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {plantas.map((plant) => (
-          <PlantCard key={plant.id} plant={plant} />
-        ))}
+        {plantas.map((plant, indice) => {
+          const letra = plant.nomeDestaque[0]?.toUpperCase();
+          const primeiraDaLetra = plantas.findIndex((p) => p.nomeDestaque[0]?.toUpperCase() === letra) === indice;
+          return (
+            <div key={plant.id} id={primeiraDaLetra ? `letra-${letra}` : undefined} className="scroll-mt-24">
+              <PlantCard plant={plant} />
+            </div>
+          );
+        })}
       </div>
 
       {plantas.length === 0 && (

@@ -1,12 +1,34 @@
-import { getPublishedDemoPlants } from "@/lib/demo-data";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Referências" };
 
-export default function ReferenciasPage() {
-  const referencias = getPublishedDemoPlants().flatMap((p) =>
-    p.referencias.map((r) => ({ ...r, plantaSlug: p.slug, plantaNome: p.nomeDestaque }))
-  );
+async function buscarReferenciasPublicadas() {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("references")
+    .select("id, tipo, titulo, ano, plants!inner ( slug, nome_destaque, status )")
+    .eq("plants.status", "publicado")
+    .order("titulo", { ascending: true });
+
+  return ((data ?? []) as unknown as {
+    id: string;
+    tipo: string;
+    titulo: string;
+    ano: string | null;
+    plants: { slug: string; nome_destaque: string };
+  }[]).map((row) => ({
+    id: row.id,
+    tipo: row.tipo,
+    titulo: row.titulo,
+    ano: row.ano ?? undefined,
+    plantaSlug: row.plants.slug,
+    plantaNome: row.plants.nome_destaque
+  }));
+}
+
+export default async function ReferenciasPage() {
+  const referencias = await buscarReferenciasPublicadas();
 
   return (
     <div className="max-w-4xl mx-auto px-5 sm:px-8 py-14">
