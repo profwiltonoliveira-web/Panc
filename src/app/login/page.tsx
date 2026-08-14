@@ -3,6 +3,7 @@
 import { Suspense, useState, FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { destinoPosLogin } from "@/lib/auth-redirect";
 
 export default function LoginPage() {
   return (
@@ -26,16 +27,21 @@ function LoginForm() {
     setCarregando(true);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
 
-    setCarregando(false);
-
-    if (error) {
+    if (error || !data.user) {
+      setCarregando(false);
       setErro("E-mail ou senha inválidos.");
       return;
     }
 
-    router.push(searchParams.get("next") ?? "/pesquisador");
+    // Consulta o papel do próprio usuário recém-autenticado — usa a policy
+    // "usuario le seu perfil" (auth.uid() = id) já existente, com a sessão
+    // do próprio usuário. Nunca usa a service role para essa checagem.
+    const { data: perfil } = await supabase.from("profiles").select("papel").eq("id", data.user.id).single();
+
+    setCarregando(false);
+    router.push(destinoPosLogin(perfil?.papel, searchParams.get("next")));
     router.refresh();
   }
 
