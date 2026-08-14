@@ -73,6 +73,25 @@ export interface Localizacao {
   descricao?: string;
 }
 
+export interface RegistroCampo {
+  id: string;
+  plantId?: string;
+  pesquisadorId: string;
+  descricao: string;
+  data: string;
+}
+
+export interface RevisaoEditorial {
+  id: string;
+  plantId: string;
+  revisorId: string;
+  revisorNome?: string;
+  statusAnterior: StatusVerbete;
+  statusNovo: StatusVerbete;
+  comentario?: string;
+  criadoEm: string;
+}
+
 export interface Plant {
   id: string;
   slug: string;
@@ -99,5 +118,7 @@ export interface Plant {
   saberes: SaberComunitario[];
   referencias: ReferenciaBibliografica[];
   localizacoes: Localizacao[];
+  registrosCampo: RegistroCampo[];
+  revisoes: RevisaoEditorial[];
   demonstracao: boolean; // true = dado fictício, nunca deve ser tratado como publicação real
 }

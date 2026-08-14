@@ -1,9 +1,9 @@
 // ATENÇÃO — DADOS DE DEMONSTRAÇÃO — NÃO PUBLICAR
-// Este arquivo existe apenas para permitir que a interface seja visualizada e
-// testada durante o desenvolvimento. Nenhum nome de morador, entrevista,
-// identificação botânica, etimologia, ocorrência ou dado de campo aqui é real.
-// Ao conectar o projeto ao Supabase, substitua estas funções por consultas
-// reais (ver src/lib/supabase/client.ts e supabase/schema.sql).
+// Nenhum nome de morador, entrevista, identificação botânica, etimologia,
+// ocorrência ou dado de campo aqui é real. Nenhuma página em produção importa
+// mais este arquivo — todas consultam o Supabase real (ver src/lib/supabase/
+// mappers.ts e supabase/schema.sql). Mantido apenas como referência e como
+// base do script de semente em supabase/seed.sql para testes locais.
 
 import { Plant } from "./types";
 
@@ -79,7 +79,9 @@ export const DEMO_PLANTS: Plant[] = [
     ],
     localizacoes: [
       { id: "loc-1", plantId: "demo-1", latitude: -11.9439, longitude: -38.3672, tipo: "ocorrencia", descricao: "Ponto de demonstração próximo a Itamira" }
-    ]
+    ],
+    registrosCampo: [],
+    revisoes: []
   },
   {
     id: "demo-2",
@@ -103,7 +105,9 @@ export const DEMO_PLANTS: Plant[] = [
     ],
     saberes: [],
     referencias: [],
-    localizacoes: []
+    localizacoes: [],
+    registrosCampo: [],
+    revisoes: []
   },
   {
     id: "demo-3",
@@ -118,7 +122,9 @@ export const DEMO_PLANTS: Plant[] = [
     fotos: [],
     saberes: [],
     referencias: [],
-    localizacoes: []
+    localizacoes: [],
+    registrosCampo: [],
+    revisoes: []
   }
 ];
 
