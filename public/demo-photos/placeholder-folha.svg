@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#F3EEE1"/>
+  <text x="200" y="140" text-anchor="middle" font-family="monospace" font-size="12" fill="#9C4A2A">DADO DE DEMONSTRACAO</text>
+  <text x="200" y="160" text-anchor="middle" font-family="monospace" font-size="12" fill="#9C4A2A">NAO PUBLICAR</text>
+  <path d="M200 190 C160 210 150 250 200 260 C250 250 240 210 200 190 Z" fill="#8A9A5B" opacity="0.6"/>
+</svg>
