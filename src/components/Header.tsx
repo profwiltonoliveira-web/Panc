@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { sair } from "@/lib/actions/auth";
 
 const NAV = [
   { href: "/dicionario", label: "Dicionário" },
@@ -7,7 +9,20 @@ const NAV = [
   { href: "/referencias", label: "Referências" }
 ];
 
-export default function Header() {
+export default async function Header() {
+  const supabase = createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  let papel: string | null = null;
+  if (user) {
+    const { data: profile } = await supabase.from("profiles").select("papel").eq("id", user.id).single();
+    papel = profile?.papel ?? null;
+  }
+
+  const painelHref = papel === "administrador" ? "/admin" : "/pesquisador";
+
   return (
     <header className="border-b border-line bg-paper/95 backdrop-blur sticky top-0 z-40">
       <div className="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
@@ -25,12 +40,28 @@ export default function Header() {
               {item.label}
             </Link>
           ))}
-          <Link
-            href="/login"
-            className="ml-2 border border-ink/20 px-3 py-1.5 rounded-sm hover:border-clay hover:text-clay transition-colors"
-          >
-            Entrar
-          </Link>
+          {user ? (
+            <>
+              <Link href={painelHref} className="hover:text-clay transition-colors">
+                Painel
+              </Link>
+              <form action={sair}>
+                <button
+                  type="submit"
+                  className="border border-ink/20 px-3 py-1.5 rounded-sm hover:border-clay hover:text-clay transition-colors"
+                >
+                  Sair
+                </button>
+              </form>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="ml-2 border border-ink/20 px-3 py-1.5 rounded-sm hover:border-clay hover:text-clay transition-colors"
+            >
+              Entrar
+            </Link>
+          )}
         </nav>
         <Link href="/busca" className="md:hidden font-sans text-sm border border-ink/20 px-3 py-1.5 rounded-sm">
           Buscar
