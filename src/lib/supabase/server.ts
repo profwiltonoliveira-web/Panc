@@ -10,21 +10,19 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
+        // getAll/setAll (não get/set/remove, deprecated) — mesmo motivo do
+        // middleware. setAll() só pode gravar cookies quando chamado a
+        // partir de uma Server Action/Route Handler; chamado a partir de um
+        // Server Component ele lança, e é seguro ignorar (o middleware já
+        // cuida do refresh de sessão nesse caso).
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           try {
-            cookieStore.set({ name, value, ...options });
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
           } catch {
-            // chamado a partir de um Server Component — ignorável se houver middleware de refresh de sessão
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: "", ...options });
-          } catch {
-            // idem
+            // ignorável — ver comentário acima
           }
         }
       }
