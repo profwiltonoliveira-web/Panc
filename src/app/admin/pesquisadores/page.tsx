@@ -1,25 +1,47 @@
-// Em produção: SELECT * FROM profiles WHERE papel = 'pesquisador'
-const PESQUISADORES_EXEMPLO = [
-  { id: "demo-pesquisador-1", nome: "Pesquisador de demonstração", instituicao: "Escola de Itamira (exemplo)" }
-];
+import { createClient } from "@/lib/supabase/server";
 
-export default function PesquisadoresPage() {
+export default async function PesquisadoresPage() {
+  const supabase = createClient();
+  const { data: pesquisadores } = await supabase
+    .from("profiles")
+    .select("id, nome, instituicao, criado_em")
+    .eq("papel", "pesquisador")
+    .order("nome", { ascending: true });
+
+  const lista = pesquisadores ?? [];
+  const comContagem = await Promise.all(
+    lista.map(async (p) => {
+      const { count } = await supabase
+        .from("plants")
+        .select("id", { count: "exact", head: true })
+        .eq("autor_id", p.id);
+      return { ...p, verbetes: count ?? 0 };
+    })
+  );
+
   return (
     <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
       <h1 className="font-display text-3xl text-ink">Pesquisadores</h1>
       <div className="mt-8 divide-y divide-line">
-        {PESQUISADORES_EXEMPLO.map((p) => (
-          <div key={p.id} className="py-4 font-sans text-sm flex items-center justify-between">
+        {comContagem.map((p) => (
+          <div key={p.id} className="py-4 font-sans text-sm flex items-center justify-between flex-wrap gap-2">
             <div>
               <p className="text-ink">{p.nome}</p>
-              <p className="text-ink/50 text-xs">{p.instituicao}</p>
+              <p className="text-ink/50 text-xs">{p.instituicao ?? "Instituição não informada"}</p>
             </div>
-            <span className="font-mono text-[11px] uppercase tracking-widest text-moss border border-moss/40 px-2 py-0.5 rounded-sm">
-              Pesquisador
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[11px] text-ink/40">{p.verbetes} verbete(s)</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-moss border border-moss/40 px-2 py-0.5 rounded-sm">
+                Pesquisador
+              </span>
+            </div>
           </div>
         ))}
       </div>
+
+      {comContagem.length === 0 && (
+        <p className="font-sans text-ink/50 mt-10 italic">Nenhum pesquisador cadastrado ainda.</p>
+      )}
     </div>
   );
 }

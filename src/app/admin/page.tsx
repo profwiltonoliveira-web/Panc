@@ -1,15 +1,30 @@
 import Link from "next/link";
-import { DEMO_PLANTS } from "@/lib/demo-data";
+import { createClient } from "@/lib/supabase/server";
 
-export default function PainelAdminPage() {
-  const resumo = {
-    total: DEMO_PLANTS.length,
-    publicados: DEMO_PLANTS.filter((p) => p.status === "publicado").length,
-    rascunhos: DEMO_PLANTS.filter((p) => p.status === "rascunho").length,
-    pendentesRevisao: DEMO_PLANTS.filter((p) => p.status === "em_revisao").length,
-    pesquisadores: 1, // exemplo — em produção: count(profiles WHERE papel = 'pesquisador')
-    fotografias: DEMO_PLANTS.reduce((acc, p) => acc + p.fotos.length, 0)
-  };
+async function contarLinhas(
+  supabase: ReturnType<typeof createClient>,
+  tabela: string,
+  filtro?: { coluna: string; valor: string }
+) {
+  let query = supabase.from(tabela).select("id", { count: "exact", head: true });
+  if (filtro) query = query.eq(filtro.coluna, filtro.valor);
+  const { count } = await query;
+  return count ?? 0;
+}
+
+export default async function PainelAdminPage() {
+  const supabase = createClient();
+
+  const [total, publicados, rascunhos, pendentesRevisao, pesquisadores, fotografias] = await Promise.all([
+    contarLinhas(supabase, "plants"),
+    contarLinhas(supabase, "plants", { coluna: "status", valor: "publicado" }),
+    contarLinhas(supabase, "plants", { coluna: "status", valor: "rascunho" }),
+    contarLinhas(supabase, "plants", { coluna: "status", valor: "em_revisao" }),
+    contarLinhas(supabase, "profiles", { coluna: "papel", valor: "pesquisador" }),
+    contarLinhas(supabase, "plant_photos")
+  ]);
+
+  const resumo = { total, publicados, rascunhos, pendentesRevisao, pesquisadores, fotografias };
 
   return (
     <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
