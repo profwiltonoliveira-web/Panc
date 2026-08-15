@@ -87,9 +87,11 @@ export default async function HomePage() {
             </nav>
           </div>
 
-          {/* ESTUDO BOTÂNICO — ilustração decorativa, sem virar catálogo */}
+          {/* O QUE O DICIONÁRIO REÚNE — não é uma ilustração botânica: a
+              botânica é só um dos quatro eixos, no mesmo peso que os outros
+              três, para não passar a impressão de catálogo de plantas. */}
           <div className="hidden lg:block" aria-hidden>
-            <EstudoBotanico />
+            <EixosDoDicionario />
           </div>
         </div>
       </section>
@@ -121,59 +123,79 @@ export default async function HomePage() {
   );
 }
 
-// Ilustração botânica original, em linha, evocando uma prancha de
-// herbário — a mesma referência visual do "fichário de pesquisa" já usada
-// em LexicalCard. Desenhada em SVG inline (sem imagem externa, sem nova
-// dependência) usando só a paleta existente do projeto.
-function EstudoBotanico() {
+const EIXOS = [
+  { titulo: "Plantas", descricao: "Identificação botânica e uso alimentar", Icone: IconePlanta },
+  { titulo: "Palavras", descricao: "Nome popular, etimologia, pronúncia", Icone: IconePalavra },
+  { titulo: "Saberes", descricao: "Memória e uso tradicional da comunidade", Icone: IconeSaber },
+  { titulo: "Território", descricao: "Ocorrências no espaço de Itamira", Icone: IconeTerritorio }
+];
+
+// O que o PANCpedia reúne — não uma ilustração botânica isolada: os quatro
+// eixos do dicionário (a dimensão linguística tem o mesmo peso visual das
+// demais, de propósito). Altura definida pelo próprio conteúdo, não por
+// uma proporção fixa — evita cortar qualquer elemento em telas diferentes.
+// Ícones em SVG inline, sem imagem externa, sem nova dependência.
+function EixosDoDicionario() {
   return (
-    <div className="border border-line rounded-sm bg-card p-8 aspect-[3/4] flex flex-col">
-      <svg viewBox="0 0 200 260" className="flex-1 w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M100 235 C100 235 96 150 100 90 C104 40 100 15 100 15"
-          stroke="#3E4A24"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-        <path
-          d="M100 200 C70 190 48 165 42 128 C68 130 92 148 100 178"
-          fill="#8A9A5B"
-          fillOpacity="0.16"
-          stroke="#5C6B37"
-          strokeWidth="1.3"
-        />
-        <path d="M55 138 C68 148 84 162 96 178" stroke="#5C6B37" strokeWidth="0.8" strokeOpacity="0.6" />
-        <path
-          d="M100 165 C130 152 150 124 154 88 C128 94 106 116 99 148"
-          fill="#8A9A5B"
-          fillOpacity="0.16"
-          stroke="#5C6B37"
-          strokeWidth="1.3"
-        />
-        <path d="M144 100 C130 112 114 128 102 148" stroke="#5C6B37" strokeWidth="0.8" strokeOpacity="0.6" />
-        <path
-          d="M100 130 C76 118 58 92 54 58 C80 64 100 84 105 112"
-          fill="#8A9A5B"
-          fillOpacity="0.2"
-          stroke="#5C6B37"
-          strokeWidth="1.3"
-        />
-        <path d="M62 70 C74 82 88 98 100 116" stroke="#5C6B37" strokeWidth="0.8" strokeOpacity="0.6" />
-        <path
-          d="M100 96 C124 82 140 58 142 30 C118 38 102 56 98 80"
-          fill="#8A9A5B"
-          fillOpacity="0.2"
-          stroke="#5C6B37"
-          strokeWidth="1.3"
-        />
-        <path d="M134 42 C122 52 110 66 100 80" stroke="#5C6B37" strokeWidth="0.8" strokeOpacity="0.6" />
-        <circle cx="100" cy="220" r="3.5" fill="#D4A72C" />
-        <circle cx="88" cy="228" r="2.5" fill="#9C4A2A" fillOpacity="0.75" />
-        <circle cx="112" cy="227" r="2.5" fill="#9C4A2A" fillOpacity="0.75" />
-      </svg>
-      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-moss/70 text-center mt-3">
-        Estudo botânico · Itamira
+    <div className="border border-line rounded-sm bg-card px-8 py-9">
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-moss mb-7">
+        Plantas · Palavras · Saberes · Território
+      </p>
+      <ul className="space-y-6">
+        {EIXOS.map((eixo) => (
+          <li key={eixo.titulo} className="flex items-start gap-4">
+            <eixo.Icone className="text-moss shrink-0 mt-0.5" />
+            <div>
+              <p className="font-display text-base text-ink leading-tight">{eixo.titulo}</p>
+              <p className="font-sans text-xs text-ink/55 mt-0.5 leading-snug">{eixo.descricao}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-moss/50 mt-7 pt-5 border-t border-line/70">
+        PANCpedia · Itamira
       </p>
     </div>
+  );
+}
+
+function IconePlanta({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" className={className} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20V9" />
+      <path d="M12 13c-3.5 0-6-2.5-6.5-6.5C9 6 12 8 12 13Z" />
+      <path d="M12 10c3.5 0 6-2.2 6.5-6C15 4 12 6 12 10Z" />
+    </svg>
+  );
+}
+
+function IconePalavra({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" className={className} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M9 5 6 19" />
+      <path d="M18 5l-3 14" />
+    </svg>
+  );
+}
+
+function IconeSaber({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" className={className} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <circle cx="12" cy="7" r="2.3" />
+      <circle cx="6.5" cy="16.5" r="2.3" />
+      <circle cx="17.5" cy="16.5" r="2.3" />
+      <path d="M10.3 8.9 7.9 14.4" />
+      <path d="M13.7 8.9l2.4 5.5" />
+      <path d="M9 16.5h6" />
+    </svg>
+  );
+}
+
+function IconeTerritorio({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" className={className} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
+      <path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z" />
+      <circle cx="12" cy="9.5" r="2.2" />
+    </svg>
   );
 }
