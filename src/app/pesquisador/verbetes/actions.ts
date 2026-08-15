@@ -121,13 +121,6 @@ export async function salvarConteudo(id: string, formData: FormData) {
   revalidarVerbete(id);
 }
 
-// Combina os dados gerais do verbete com o registro linguístico em um único
-// envio de formulário — são duas tabelas, mas uma só experiência de edição.
-export async function salvarVerbeteCompleto(id: string, formData: FormData) {
-  await salvarConteudo(id, formData);
-  await salvarRegistroLinguistico(id, formData);
-}
-
 export async function enviarParaRevisao(id: string) {
   const { supabase, user } = await requireUser();
 
@@ -161,10 +154,13 @@ export async function enviarParaRevisao(id: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Registro linguístico — "A palavra em Itamira" (um por verbete)
+// Registros linguísticos — "A palavra em Itamira"
+// Um verbete pode ter vários registros (linguistic_records não tem
+// unicidade em plant_id) — mesmo padrão de adicionar/remover usado em
+// saberes, referências, registros de campo e localizações.
 // ---------------------------------------------------------------------------
 
-export async function salvarRegistroLinguistico(plantId: string, formData: FormData) {
+export async function adicionarRegistroLinguistico(plantId: string, formData: FormData) {
   const { supabase } = await requireUser();
 
   const variacoesRaw = texto(formData, "variacoes");
@@ -173,7 +169,7 @@ export async function salvarRegistroLinguistico(plantId: string, formData: FormD
     : [];
   const naoDeterminada = formData.get("etimologia_nao_determinada") === "on";
 
-  const payload = {
+  const { error } = await supabase.from("linguistic_records").insert({
     plant_id: plantId,
     nome_popular: textoObrigatorio(formData, "nome_popular"),
     variacoes,
@@ -190,19 +186,16 @@ export async function salvarRegistroLinguistico(plantId: string, formData: FormD
     etimologia_fonte: naoDeterminada ? null : texto(formData, "etimologia_fonte"),
     etimologia_observacoes: naoDeterminada ? null : texto(formData, "etimologia_observacoes"),
     etimologia_nao_determinada: naoDeterminada
-  };
+  });
 
-  const { data: existente } = await supabase
-    .from("linguistic_records")
-    .select("id")
-    .eq("plant_id", plantId)
-    .maybeSingle();
+  if (error) throw new Error(`Não foi possível adicionar o registro linguístico: ${error.message}`);
+  revalidarVerbete(plantId);
+}
 
-  const { error } = existente
-    ? await supabase.from("linguistic_records").update(payload).eq("id", existente.id)
-    : await supabase.from("linguistic_records").insert(payload);
-
-  if (error) throw new Error(`Não foi possível salvar o registro linguístico: ${error.message}`);
+export async function removerRegistroLinguistico(plantId: string, id: string) {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("linguistic_records").delete().eq("id", id);
+  if (error) throw new Error(`Não foi possível remover: ${error.message}`);
   revalidarVerbete(plantId);
 }
 

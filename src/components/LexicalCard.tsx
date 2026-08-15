@@ -52,7 +52,7 @@ export default function LexicalCard({ registro }: { registro: RegistroLinguistic
 
         {registro.usoLinguistico && (
           <div className="field-divider">
-            <p className="font-mono text-[11px] uppercase tracking-widest text-moss">Uso linguístico</p>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-moss">Contexto de uso</p>
             <p>{registro.usoLinguistico}</p>
           </div>
         )}

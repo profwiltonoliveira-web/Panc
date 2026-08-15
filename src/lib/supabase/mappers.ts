@@ -278,7 +278,6 @@ export function mapRevisao(row: RevisionRow): RevisaoEditorial {
 
 export function mapPlantRow(row: PlantRow): Plant {
   const fotos = (row.plant_photos ?? []).map(mapFoto);
-  const linguisticos = (row.linguistic_records ?? []).map(mapRegistroLinguistico);
 
   return {
     id: row.id,
@@ -303,7 +302,7 @@ export function mapPlantRow(row: PlantRow): Plant {
     autorId: row.autor_id,
     demonstracao: row.demonstracao,
     fotos,
-    registroLinguistico: linguisticos[0],
+    registrosLinguisticos: (row.linguistic_records ?? []).map(mapRegistroLinguistico),
     saberes: (row.community_knowledge ?? []).map(mapSaber),
     referencias: (row.references ?? []).map(mapReferencia),
     localizacoes: (row.locations ?? []).map(mapLocalizacao),

@@ -155,11 +155,15 @@ export default async function VerbetePage({ params }: Props) {
           </section>
         </div>
 
-        {/* A PALAVRA EM ITAMIRA — elemento de assinatura */}
+        {/* A PALAVRA EM ITAMIRA — elemento de assinatura. Um verbete pode
+            reunir mais de um registro linguístico (ex.: variações coletadas
+            com diferentes informantes). */}
         <div>
-          {plant.registroLinguistico ? (
-            <div className="sticky top-24">
-              <LexicalCard registro={plant.registroLinguistico} />
+          {plant.registrosLinguisticos.length > 0 ? (
+            <div className="sticky top-24 space-y-6">
+              {plant.registrosLinguisticos.map((registro) => (
+                <LexicalCard key={registro.id} registro={registro} />
+              ))}
             </div>
           ) : (
             <p className="font-sans text-sm text-ink/50 italic border border-line rounded-sm p-6">

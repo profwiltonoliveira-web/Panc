@@ -7,6 +7,7 @@ import {
   adicionarLocalizacao,
   adicionarReferencia,
   adicionarRegistroCampo,
+  adicionarRegistroLinguistico,
   adicionarSaber,
   definirFotoPrincipal,
   enviarFoto,
@@ -15,8 +16,9 @@ import {
   removerLocalizacao,
   removerReferencia,
   removerRegistroCampo,
+  removerRegistroLinguistico,
   removerSaber,
-  salvarVerbeteCompleto
+  salvarConteudo
 } from "../actions";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -104,7 +106,76 @@ export default async function EditarVerbetePage({ params }: { params: { id: stri
       </header>
 
       <section>
-        <VerbeteForm plant={verbete} action={salvarVerbeteCompleto.bind(null, verbete.id)} />
+        <VerbeteForm plant={verbete} action={salvarConteudo.bind(null, verbete.id)} />
+      </section>
+
+      {/* A PALAVRA EM ITAMIRA — dimensão linguística do verbete. Um mesmo
+          verbete pode ter vários registros (variações de nome coletadas
+          com diferentes pessoas, por exemplo), por isso lista + adicionar,
+          como as demais seções. */}
+      <section className="border-t border-line pt-10">
+        <h2 className="font-display text-xl text-ink mb-1">A palavra em Itamira</h2>
+        <p className="font-sans text-xs text-ink/50 mb-4">
+          Patrimônio lexical da PANC — nome usado na comunidade, variantes, significado, etimologia.
+        </p>
+
+        {verbete.registrosLinguisticos.length > 0 ? (
+          <ul className="space-y-3 mb-6">
+            {verbete.registrosLinguisticos.map((registro) => (
+              <li key={registro.id} className="border border-moss/40 bg-card rounded-sm p-4 flex items-start justify-between gap-4">
+                <div className="font-sans text-sm">
+                  <p className="text-ink font-display text-lg">{registro.nomePopular}</p>
+                  {registro.variacoes.length > 0 && (
+                    <p className="text-ink/70 mt-0.5">Variantes: {registro.variacoes.join(", ")}</p>
+                  )}
+                  {registro.significado && <p className="text-ink/70 mt-0.5">{registro.significado}</p>}
+                  <p className="text-ink/40 text-xs mt-1">Fonte: {registro.fonteRegistro}</p>
+                </div>
+                <form action={removerRegistroLinguistico.bind(null, verbete.id, registro.id)}>
+                  <button type="submit" className="font-mono text-[11px] uppercase tracking-widest text-clay hover:opacity-70 whitespace-nowrap">
+                    Remover
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="font-sans text-sm text-ink/50 italic mb-6">Nenhum registro linguístico ainda.</p>
+        )}
+
+        <form
+          action={adicionarRegistroLinguistico.bind(null, verbete.id)}
+          className="space-y-4 font-sans text-sm border border-moss/40 bg-card p-5 rounded-sm"
+        >
+          <p className="font-display text-lg text-ink -mt-1">+ Adicionar registro linguístico</p>
+
+          <CampoTexto name="nome_popular" label="Palavra / nome usado em Itamira" required />
+          <CampoTexto name="variacoes" label="Variantes / outras formas de nomeação (separadas por vírgula)" />
+          <CampoTexto name="pronuncia" label="Pronúncia" />
+          <CampoTexto name="significado" label="Significado na comunidade" textarea />
+          <CampoTexto name="uso_linguistico" label="Contexto de uso" textarea />
+          <CampoTexto name="origem_nome" label="Origem do nome" textarea />
+          <CampoTexto name="expressoes_relacionadas" label="Expressões relacionadas" textarea />
+          <CampoTexto name="observacao_linguistica" label="Observações linguísticas (análise do pesquisador)" textarea />
+          <CampoTexto name="fonte_registro" label="Fonte do registro / informante" required />
+
+          <div className="pt-3 border-t border-moss/20 space-y-3">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-moss">Etimologia / origem do termo</p>
+            <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-moss">
+              <input type="checkbox" name="etimologia_nao_determinada" defaultChecked />
+              Etimologia não determinada
+            </label>
+            <CampoTexto name="etimologia_origem" label="Etimologia — origem" />
+            <CampoTexto name="etimologia_lingua_origem" label="Etimologia — língua de origem" />
+            <CampoTexto name="etimologia_significado" label="Etimologia — significado" />
+            <CampoTexto name="etimologia_fonte" label="Etimologia — fonte" />
+            <CampoTexto name="etimologia_observacoes" label="Etimologia — observações" textarea />
+          </div>
+
+          <button type="submit" className="bg-moss text-paper px-4 py-2 rounded-sm hover:bg-moss-dark">
+            Adicionar registro linguístico
+          </button>
+        </form>
       </section>
 
       {/* FOTOGRAFIAS */}
@@ -288,6 +359,31 @@ export default async function EditarVerbetePage({ params }: { params: { id: stri
             ))}
           </ul>
         </section>
+      )}
+    </div>
+  );
+}
+
+function CampoTexto({
+  name,
+  label,
+  textarea,
+  required
+}: {
+  name: string;
+  label: string;
+  textarea?: boolean;
+  required?: boolean;
+}) {
+  return (
+    <div>
+      <label htmlFor={name} className="block text-xs font-mono uppercase tracking-widest text-moss mb-1">
+        {label} {required && <span className="text-clay">*</span>}
+      </label>
+      {textarea ? (
+        <textarea id={name} name={name} rows={3} className="w-full border border-line rounded-sm px-3 py-2 bg-white focus:border-clay outline-none" />
+      ) : (
+        <input id={name} name={name} required={required} className="w-full border border-line rounded-sm px-3 py-2 bg-white focus:border-clay outline-none" />
       )}
     </div>
   );

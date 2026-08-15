@@ -42,22 +42,24 @@ export const DEMO_PLANTS: Plant[] = [
         principal: true
       }
     ],
-    registroLinguistico: {
-      id: "ling-1",
-      plantId: "demo-1",
-      nomePopular: "Bredo",
-      variacoes: ["Bredo-de-porco (exemplo)", "Caruru (variante regional a confirmar)"],
-      pronuncia: "/ˈbɾe.du/",
-      significado: "DADO DE DEMONSTRAÇÃO — NÃO PUBLICAR.",
-      origemNome: "DADO DE DEMONSTRAÇÃO — NÃO PUBLICAR.",
-      usoLinguistico: "Exemplo de uso corrente em frases coletadas na comunidade (fictício).",
-      expressoesRelacionadas: "Exemplo ilustrativo apenas.",
-      observacaoLinguistica: "Análise de exemplo dos pesquisadores sobre a variação lexical observada.",
-      fonteRegistro: "Registro de campo de demonstração — Itamira, 2025 (fictício)",
-      etimologia: {
-        naoDeterminada: true
+    registrosLinguisticos: [
+      {
+        id: "ling-1",
+        plantId: "demo-1",
+        nomePopular: "Bredo",
+        variacoes: ["Bredo-de-porco (exemplo)", "Caruru (variante regional a confirmar)"],
+        pronuncia: "/ˈbɾe.du/",
+        significado: "DADO DE DEMONSTRAÇÃO — NÃO PUBLICAR.",
+        origemNome: "DADO DE DEMONSTRAÇÃO — NÃO PUBLICAR.",
+        usoLinguistico: "Exemplo de uso corrente em frases coletadas na comunidade (fictício).",
+        expressoesRelacionadas: "Exemplo ilustrativo apenas.",
+        observacaoLinguistica: "Análise de exemplo dos pesquisadores sobre a variação lexical observada.",
+        fonteRegistro: "Registro de campo de demonstração — Itamira, 2025 (fictício)",
+        etimologia: {
+          naoDeterminada: true
+        }
       }
-    },
+    ],
     saberes: [
       {
         id: "saber-1",
@@ -103,6 +105,7 @@ export const DEMO_PLANTS: Plant[] = [
         principal: true
       }
     ],
+    registrosLinguisticos: [],
     saberes: [],
     referencias: [],
     localizacoes: [],
@@ -120,6 +123,7 @@ export const DEMO_PLANTS: Plant[] = [
     autorId: "demo-pesquisador-1",
     demonstracao: true,
     fotos: [],
+    registrosLinguisticos: [],
     saberes: [],
     referencias: [],
     localizacoes: [],

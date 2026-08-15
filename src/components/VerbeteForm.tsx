@@ -1,11 +1,15 @@
 import { Plant } from "@/lib/types";
 
-// Formulário de dados gerais + "A palavra em Itamira" de um verbete já
-// criado. O envio chama diretamente uma Server Action (salvarVerbeteCompleto)
-// que grava em `plants` e `linguistic_records` via Supabase, respeitando a
-// RLS: o pesquisador só consegue gravar enquanto o verbete estiver em
-// rascunho ou em revisão — depois de aprovado, a escrita é bloqueada pelo
-// próprio banco (ver supabase/schema.sql).
+// Formulário de dados gerais de um verbete já criado (identificação
+// botânica e uso alimentar). A dimensão linguística ("A palavra em
+// Itamira") tem sua própria seção, com sua própria lista e formulário de
+// adicionar, na página de edição — um verbete pode ter vários registros
+// linguísticos, então não faz parte deste formulário único.
+// O envio chama diretamente a Server Action salvarConteudo, que grava em
+// `plants` via Supabase, respeitando a RLS: o pesquisador só consegue
+// gravar enquanto o verbete estiver em rascunho ou em revisão — depois de
+// aprovado, a escrita é bloqueada pelo próprio banco (ver
+// supabase/schema.sql).
 export default function VerbeteForm({
   plant,
   action
@@ -13,7 +17,6 @@ export default function VerbeteForm({
   plant: Plant;
   action: (formData: FormData) => void;
 }) {
-  const registro = plant.registroLinguistico;
   const podeEditar = plant.status === "rascunho" || plant.status === "em_revisao";
 
   return (
@@ -46,62 +49,6 @@ export default function VerbeteForm({
         </div>
         <Campo name="receitas" label="Receitas / preparações" defaultValue={plant.receitas} textarea />
         <Campo name="observacoes_uso" label="Observações de uso" defaultValue={plant.observacoesUso} textarea />
-      </fieldset>
-
-      <fieldset className="space-y-4 border border-moss/40 bg-card p-5 rounded-sm" disabled={!podeEditar}>
-        <legend className="font-display text-xl text-ink mb-2 px-1">A palavra em Itamira</legend>
-        <Campo name="nome_popular" label="Nome popular" defaultValue={registro?.nomePopular} required />
-        <Campo
-          name="variacoes"
-          label="Variações (separadas por vírgula)"
-          defaultValue={registro?.variacoes.join(", ")}
-        />
-        <Campo name="pronuncia" label="Pronúncia" defaultValue={registro?.pronuncia} />
-        <Campo name="significado" label="Significado" defaultValue={registro?.significado} textarea />
-        <Campo name="origem_nome" label="Origem do nome" defaultValue={registro?.origemNome} textarea />
-        <Campo name="uso_linguistico" label="Uso linguístico" defaultValue={registro?.usoLinguistico} textarea />
-        <Campo
-          name="expressoes_relacionadas"
-          label="Expressões relacionadas"
-          defaultValue={registro?.expressoesRelacionadas}
-          textarea
-        />
-        <Campo
-          name="observacao_linguistica"
-          label="Observação linguística (análise do pesquisador)"
-          defaultValue={registro?.observacaoLinguistica}
-          textarea
-        />
-        <Campo name="fonte_registro" label="Fonte do registro" defaultValue={registro?.fonteRegistro} required />
-
-        <div className="pt-3 border-t border-moss/20 space-y-3">
-          <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-moss">
-            <input
-              type="checkbox"
-              name="etimologia_nao_determinada"
-              defaultChecked={registro?.etimologia?.naoDeterminada ?? true}
-            />
-            Etimologia não determinada
-          </label>
-          <Campo name="etimologia_origem" label="Etimologia — origem" defaultValue={registro?.etimologia?.origem} />
-          <Campo
-            name="etimologia_lingua_origem"
-            label="Etimologia — língua de origem"
-            defaultValue={registro?.etimologia?.linguaOrigem}
-          />
-          <Campo
-            name="etimologia_significado"
-            label="Etimologia — significado"
-            defaultValue={registro?.etimologia?.significado}
-          />
-          <Campo name="etimologia_fonte" label="Etimologia — fonte" defaultValue={registro?.etimologia?.fonte} />
-          <Campo
-            name="etimologia_observacoes"
-            label="Etimologia — observações"
-            defaultValue={registro?.etimologia?.observacoes}
-            textarea
-          />
-        </div>
       </fieldset>
 
       {podeEditar ? (

@@ -19,7 +19,7 @@ Integra botânica, uso alimentar, saberes comunitários, patrimônio lexical
 | Banco de dados  | PostgreSQL (via Supabase)                                |
 | Autenticação    | Supabase Auth (e-mail/senha), com papéis via `profiles`  |
 | Armazenamento   | Supabase Storage (fotografias)                           |
-| Mapa            | React-Leaflet + OpenStreetMap                             |
+| Mapa            | Google My Maps (incorporado via `NEXT_PUBLIC_GOOGLE_MY_MAPS_EMBED_URL`) |
 
 O projeto foi estruturado para que **banco, autenticação e armazenamento
 possam ser administrados separadamente da interface** — se no futuro vocês
@@ -39,7 +39,7 @@ pancpedia/
 │   │   ├── dicionario/                → /dicionario (índice alfabético real)
 │   │   ├── panc/[slug]/               → /panc/[slug] (verbete, só status=publicado)
 │   │   ├── busca/                     → /busca (busca real no Postgres)
-│   │   ├── mapa/                      → /mapa (+ MapaCliente.tsx)
+│   │   ├── mapa/                      → /mapa (embed do Google My Maps)
 │   │   ├── sobre/                     → /sobre
 │   │   ├── referencias/               → /referencias
 │   │   ├── login/                     → /login

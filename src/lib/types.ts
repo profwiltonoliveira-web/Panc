@@ -114,7 +114,7 @@ export interface Plant {
   categoria?: string;
   autorId: string;
   fotos: Foto[];
-  registroLinguistico?: RegistroLinguistico;
+  registrosLinguisticos: RegistroLinguistico[];
   saberes: SaberComunitario[];
   referencias: ReferenciaBibliografica[];
   localizacoes: Localizacao[];
