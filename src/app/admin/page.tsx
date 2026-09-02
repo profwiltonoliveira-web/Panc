@@ -1,110 +1,114 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
-async function contarLinhas(
-  supabase: ReturnType<typeof createClient>,
-  tabela: string,
-  filtro?: { coluna: string; valor: string }
-) {
-  let query = supabase.from(tabela).select("id", { count: "exact", head: true });
-  if (filtro) query = query.eq(filtro.coluna, filtro.valor);
-  const { count } = await query;
-  return count ?? 0;
-}
+const STATUS_LABEL: Record<string, string> = {
+  rascunho: "Rascunho",
+  em_revisao: "Em revisão",
+  aprovado: "Aprovado",
+  publicado: "Publicado",
+};
 
-export default async function PainelAdminPage() {
+async function excluirVerbete(id: string) {
+  "use server";
+
   const supabase = createClient();
 
-  const [total, publicados, rascunhos, pendentesRevisao, pesquisadores, fotografias] =
-    await Promise.all([
-      contarLinhas(supabase, "plants"),
-      contarLinhas(supabase, "plants", {
-        coluna: "status",
-        valor: "publicado",
-      }),
-      contarLinhas(supabase, "plants", {
-        coluna: "status",
-        valor: "rascunho",
-      }),
-      contarLinhas(supabase, "plants", {
-        coluna: "status",
-        valor: "em_revisao",
-      }),
-      contarLinhas(supabase, "profiles", {
-        coluna: "papel",
-        valor: "pesquisador",
-      }),
-      contarLinhas(supabase, "plant_photos"),
-    ]);
+  const { data: userData } = await supabase.auth.getUser();
 
-  const resumo = {
-    total,
-    publicados,
-    rascunhos,
-    pendentesRevisao,
-    pesquisadores,
-    fotografias,
-  };
+  if (!userData.user) {
+    throw new Error("Usuário não autenticado.");
+  }
+
+  await supabase
+    .from("plant_photos")
+    .delete()
+    .eq("plant_id", id);
+
+  const { error } = await supabase
+    .from("plants")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    throw new Error("Não foi possível excluir o verbete.");
+  }
+}
+
+export default async function AdminVerbetesPage() {
+  const supabase = createClient();
+
+  const { data } = await supabase
+    .from("plants")
+    .select("id, nome_destaque, status, categories ( nome ), profiles ( nome )")
+    .order("atualizado_em", { ascending: false });
+
+  const verbetes = (data ?? []) as unknown as {
+    id: string;
+    nome_destaque: string;
+    status: string;
+    categories: { nome: string } | null;
+    profiles: { nome: string } | null;
+  }[];
 
   return (
     <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
       <h1 className="font-display text-3xl text-ink">
-        Painel administrativo
+        Todos os verbetes
       </h1>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-8">
-        <Resumo label="Verbetes" valor={resumo.total} />
-        <Resumo label="Publicados" valor={resumo.publicados} />
-        <Resumo label="Rascunhos" valor={resumo.rascunhos} />
-        <Resumo
-          label="Pendentes de revisão"
-          valor={resumo.pendentesRevisao}
-        />
-        <Resumo label="Pesquisadores" valor={resumo.pesquisadores} />
-        <Resumo label="Fotografias" valor={resumo.fotografias} />
-      </div>
+      <table className="w-full mt-8 font-sans text-sm border-collapse">
+        <thead>
+          <tr className="text-left border-b border-line text-ink/50 font-mono text-xs uppercase tracking-widest">
+            <th className="py-2">Verbete</th>
+            <th className="py-2">Status</th>
+            <th className="py-2">Categoria</th>
+            <th className="py-2">Pesquisador</th>
+            <th className="py-2">Ação</th>
+          </tr>
+        </thead>
 
-      <div className="mt-10 flex flex-wrap gap-6 font-sans text-sm">
-        <Link
-          href="/admin/revisao"
-          className="text-moss hover:text-clay"
-        >
-          Fila de revisão →
-        </Link>
+        <tbody>
+          {verbetes.map((p) => (
+            <tr key={p.id} className="border-b border-line/60">
+              <td className="py-3 text-ink">
+                {p.nome_destaque}
+              </td>
 
-        <Link
-          href="/admin/verbetes"
-          className="text-moss hover:text-clay"
-        >
-          Todos os verbetes →
-        </Link>
+              <td className="py-3 font-mono text-[11px] uppercase tracking-widest text-moss">
+                {STATUS_LABEL[p.status] ?? p.status}
+              </td>
 
-        <Link
-          href="/admin/pesquisadores"
-          className="text-moss hover:text-clay"
-        >
-          Pesquisadores →
-        </Link>
-      </div>
-    </div>
-  );
-}
+              <td className="py-3 text-ink/60">
+                {p.categories?.nome ?? "—"}
+              </td>
 
-function Resumo({
-  label,
-  valor,
-}: {
-  label: string;
-  valor: number;
-}) {
-  return (
-    <div className="border border-line rounded-sm p-4 bg-white">
-      <p className="font-mono text-[11px] uppercase tracking-widest text-moss">
-        {label}
-      </p>
-      <p className="font-display text-3xl text-ink mt-1">
-        {valor}
-      </p>
+              <td className="py-3 text-ink/60">
+                {p.profiles?.nome ?? "—"}
+              </td>
+
+              <td className="py-3">
+                <form
+                  action={async () => {
+                    await excluirVerbete(p.id);
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className="text-clay hover:underline"
+                  >
+                    Excluir
+                  </button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {verbetes.length === 0 && (
+        <p className="font-sans text-ink/50 mt-10 italic">
+          Nenhum verbete cadastrado ainda.
+        </p>
+      )}
     </div>
   );
 }
