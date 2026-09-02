@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -18,10 +19,14 @@ async function excluirVerbete(id: string) {
     throw new Error("Usuário não autenticado.");
   }
 
-  await supabase
+  const { error: fotosError } = await supabase
     .from("plant_photos")
     .delete()
     .eq("plant_id", id);
+
+  if (fotosError) {
+    throw new Error("Não foi possível excluir as fotografias.");
+  }
 
   const { error } = await supabase
     .from("plants")
@@ -31,6 +36,9 @@ async function excluirVerbete(id: string) {
   if (error) {
     throw new Error("Não foi possível excluir o verbete.");
   }
+
+  revalidatePath("/admin/verbetes");
+  revalidatePath("/admin");
 }
 
 export default async function AdminVerbetesPage() {
@@ -38,7 +46,9 @@ export default async function AdminVerbetesPage() {
 
   const { data } = await supabase
     .from("plants")
-    .select("id, nome_destaque, status, categories ( nome ), profiles ( nome )")
+    .select(
+      "id, nome_destaque, status, categories ( nome ), profiles ( nome )"
+    )
     .order("atualizado_em", { ascending: false });
 
   const verbetes = (data ?? []) as unknown as {
@@ -86,11 +96,7 @@ export default async function AdminVerbetesPage() {
               </td>
 
               <td className="py-3">
-                <form
-                  action={async () => {
-                    await excluirVerbete(p.id);
-                  }}
-                >
+                <form action={excluirVerbete.bind(null, p.id)}>
                   <button
                     type="submit"
                     className="text-clay hover:underline"
