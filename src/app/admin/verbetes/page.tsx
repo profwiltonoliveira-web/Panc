@@ -26,35 +26,22 @@ async function excluirVerbete(formData: FormData) {
     .eq("id", id);
 
   if (error) {
-    redirect(
-      `/admin/verbetes?erro=${encodeURIComponent(
-        "Não foi possível excluir este verbete."
-      )}`
-    );
+    redirect("/admin/verbetes?erro=nao-foi-possivel-excluir");
   }
 
   revalidatePath("/admin/verbetes");
   redirect("/admin/verbetes?excluido=1");
 }
 
-export default async function AdminVerbetesPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{
-    erro?: string;
-    excluido?: string;
-  }>;
-}) {
+export default async function AdminVerbetesPage() {
   const supabase = createClient();
 
-  const { data: plantas, error } = await supabase
+  const { data, error } = await supabase
     .from("plants")
     .select("id, nome_destaque, status, categoria_id, autor_id")
     .order("atualizado_em", { ascending: false });
 
-  const verbetes = plantas ?? [];
-
-  const params = searchParams ? await searchParams : {};
+  const verbetes = data ?? [];
 
   return (
     <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
@@ -62,20 +49,8 @@ export default async function AdminVerbetesPage({
         Todos os verbetes
       </h1>
 
-      {params.excluido === "1" && (
-        <p className="mt-6 rounded-md border border-line bg-moss/10 px-4 py-3 font-sans text-sm text-ink">
-          Verbete excluído com sucesso.
-        </p>
-      )}
-
-      {params.erro && (
-        <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 font-sans text-sm text-red-700">
-          {params.erro}
-        </p>
-      )}
-
       {error && (
-        <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 font-sans text-sm text-red-700">
+        <p className="mt-6 font-sans text-sm text-red-600">
           Não foi possível carregar os verbetes.
         </p>
       )}
@@ -121,15 +96,6 @@ export default async function AdminVerbetesPage({
                   <button
                     type="submit"
                     className="font-sans text-xs text-red-600 hover:underline"
-                    onClick={(e) => {
-                      if (
-                        !window.confirm(
-                          `Excluir o verbete "${p.nome_destaque}"?`
-                        )
-                      ) {
-                        e.preventDefault();
-                      }
-                    }}
                   >
                     Excluir
                   </button>
