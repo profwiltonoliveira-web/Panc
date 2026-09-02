@@ -1,75 +1,13 @@
-import { createClient } from "@/lib/supabase/server";
-
-const STATUS_LABEL: Record<string, string> = {
-  rascunho: "Rascunho",
-  em_revisao: "Em revisão",
-  aprovado: "Aprovado",
-  publicado: "Publicado",
-};
-
-export default async function AdminVerbetesPage() {
-  const supabase = createClient();
-
-  const { data, error } = await supabase
-    .from("plants")
-    .select("id, nome_destaque, status, categoria_id, autor_id")
-    .order("atualizado_em", { ascending: false });
-
-  const verbetes = data ?? [];
-
+export default function AdminVerbetesPage() {
   return (
-    <div className="max-w-6xl mx-auto px-5 sm:px-8 py-12">
-      <h1 className="font-display text-3xl text-ink">
+    <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
+      <h1 className="text-3xl text-ink">
         Todos os verbetes
       </h1>
 
-      {error && (
-        <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Não foi possível carregar os verbetes.
-        </p>
-      )}
-
-      <table className="w-full mt-8 font-sans text-sm border-collapse">
-        <thead>
-          <tr className="text-left border-b border-line text-ink/50 font-mono text-xs uppercase tracking-widest">
-            <th className="py-3">Verbete</th>
-            <th className="py-3">Status</th>
-            <th className="py-3">Categoria</th>
-            <th className="py-3">Pesquisador</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {verbetes.map((p) => (
-            <tr
-              key={p.id}
-              className="border-b border-line/60"
-            >
-              <td className="py-4 text-ink">
-                {p.nome_destaque}
-              </td>
-
-              <td className="py-4 font-mono text-[11px] uppercase tracking-widest text-moss">
-                {STATUS_LABEL[p.status] ?? p.status}
-              </td>
-
-              <td className="py-4 text-ink/60">
-                {p.categoria_id ?? "—"}
-              </td>
-
-              <td className="py-4 text-ink/60">
-                {p.autor_id ?? "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {verbetes.length === 0 && !error && (
-        <p className="font-sans text-ink/50 mt-10 italic">
-          Nenhum verbete cadastrado ainda.
-        </p>
-      )}
+      <p className="mt-6 text-ink/60">
+        Página de administração funcionando.
+      </p>
     </div>
   );
 }
