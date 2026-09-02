@@ -20,25 +20,13 @@ async function excluirVerbete(formData: FormData) {
 
   const supabase = createClient();
 
-  const { data: deleted, error } = await supabase
-    .from("plants")
-    .delete()
-    .eq("id", id)
-    .select("id");
+  const { error } = await supabase.rpc("excluir_verbete_admin", {
+    p_plant_id: id,
+  });
 
   if (error) {
     redirect(
-      `/admin/verbetes?erro=${encodeURIComponent(
-        `Erro ao excluir: ${error.message}`
-      )}`
-    );
-  }
-
-  if (!deleted || deleted.length === 0) {
-    redirect(
-      `/admin/verbetes?erro=${encodeURIComponent(
-        "O banco não permitiu a exclusão. Verifique a política RLS."
-      )}`
+      `/admin/verbetes?erro=${encodeURIComponent(error.message)}`
     );
   }
 
