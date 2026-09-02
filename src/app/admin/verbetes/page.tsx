@@ -49,7 +49,9 @@ export default async function AdminVerbetesPage() {
       </table>
 
       {verbetes.length === 0 && (
-        <p className="font-sans text-ink/50 mt-10 italic">Nenhum verbete cadastrado ainda.</p>
+        <p className="font-sans text-ink/50 mt-10 italic">
+          Nenhum verbete cadastrado ainda.
+        </p>
       )}
     </div>
   );
