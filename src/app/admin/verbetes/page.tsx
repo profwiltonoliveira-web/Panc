@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -7,21 +9,16 @@ const STATUS_LABEL: Record<string, string> = {
   publicado: "Publicado",
 };
 
-async function excluirVerbete(id: string) {
+async function excluirVerbete(formData: FormData) {
   "use server";
 
-  const supabase = createClient();
+  const id = formData.get("id");
 
-  const { data: userData } = await supabase.auth.getUser();
-
-  if (!userData.user) {
-    throw new Error("Usuário não autenticado.");
+  if (!id || typeof id !== "string") {
+    redirect("/admin/verbetes?erro=id-invalido");
   }
 
-  await supabase
-    .from("plant_photos")
-    .delete()
-    .eq("plant_id", id);
+  const supabase = createClient();
 
   const { error } = await supabase
     .from("plants")
@@ -29,33 +26,59 @@ async function excluirVerbete(id: string) {
     .eq("id", id);
 
   if (error) {
-    throw new Error("Não foi possível excluir o verbete.");
+    redirect(
+      `/admin/verbetes?erro=${encodeURIComponent(
+        "Não foi possível excluir este verbete."
+      )}`
+    );
   }
+
+  revalidatePath("/admin/verbetes");
+  redirect("/admin/verbetes?excluido=1");
 }
 
-export default async function AdminVerbetesPage() {
+export default async function AdminVerbetesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{
+    erro?: string;
+    excluido?: string;
+  }>;
+}) {
   const supabase = createClient();
 
-  const { data } = await supabase
+  const { data: plantas, error } = await supabase
     .from("plants")
-    .select(
-      "id, nome_destaque, status, categories ( nome ), profiles ( nome )"
-    )
+    .select("id, nome_destaque, status, categoria_id, autor_id")
     .order("atualizado_em", { ascending: false });
 
-  const verbetes = (data ?? []) as unknown as {
-    id: string;
-    nome_destaque: string;
-    status: string;
-    categories: { nome: string } | null;
-    profiles: { nome: string } | null;
-  }[];
+  const verbetes = plantas ?? [];
+
+  const params = searchParams ? await searchParams : {};
 
   return (
     <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
       <h1 className="font-display text-3xl text-ink">
         Todos os verbetes
       </h1>
+
+      {params.excluido === "1" && (
+        <p className="mt-6 rounded-md border border-line bg-moss/10 px-4 py-3 font-sans text-sm text-ink">
+          Verbete excluído com sucesso.
+        </p>
+      )}
+
+      {params.erro && (
+        <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 font-sans text-sm text-red-700">
+          {params.erro}
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 font-sans text-sm text-red-700">
+          Não foi possível carregar os verbetes.
+        </p>
+      )}
 
       <table className="w-full mt-8 font-sans text-sm border-collapse">
         <thead>
@@ -64,7 +87,7 @@ export default async function AdminVerbetesPage() {
             <th className="py-2">Status</th>
             <th className="py-2">Categoria</th>
             <th className="py-2">Pesquisador</th>
-            <th className="py-2">Ação</th>
+            <th className="py-2 text-right">Ação</th>
           </tr>
         </thead>
 
@@ -80,22 +103,33 @@ export default async function AdminVerbetesPage() {
               </td>
 
               <td className="py-3 text-ink/60">
-                {p.categories?.nome ?? "—"}
+                {p.categoria_id ?? "—"}
               </td>
 
               <td className="py-3 text-ink/60">
-                {p.profiles?.nome ?? "—"}
+                {p.autor_id ?? "—"}
               </td>
 
-              <td className="py-3">
-                <form
-                  action={async () => {
-                    await excluirVerbete(p.id);
-                  }}
-                >
+              <td className="py-3 text-right">
+                <form action={excluirVerbete}>
+                  <input
+                    type="hidden"
+                    name="id"
+                    value={p.id}
+                  />
+
                   <button
                     type="submit"
-                    className="text-clay hover:underline"
+                    className="font-sans text-xs text-red-600 hover:underline"
+                    onClick={(e) => {
+                      if (
+                        !window.confirm(
+                          `Excluir o verbete "${p.nome_destaque}"?`
+                        )
+                      ) {
+                        e.preventDefault();
+                      }
+                    }}
                   >
                     Excluir
                   </button>
