@@ -1,6 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -8,30 +6,6 @@ const STATUS_LABEL: Record<string, string> = {
   aprovado: "Aprovado",
   publicado: "Publicado",
 };
-
-async function excluirVerbete(formData: FormData) {
-  "use server";
-
-  const id = formData.get("id");
-
-  if (!id || typeof id !== "string") {
-    redirect("/admin/verbetes?erro=id-invalido");
-  }
-
-  const supabase = createClient();
-
-  const { error } = await supabase
-    .from("plants")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    redirect("/admin/verbetes?erro=nao-foi-possivel-excluir");
-  }
-
-  revalidatePath("/admin/verbetes");
-  redirect("/admin/verbetes?excluido=1");
-}
 
 export default async function AdminVerbetesPage() {
   const supabase = createClient();
@@ -44,13 +18,13 @@ export default async function AdminVerbetesPage() {
   const verbetes = data ?? [];
 
   return (
-    <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12">
+    <div className="max-w-6xl mx-auto px-5 sm:px-8 py-12">
       <h1 className="font-display text-3xl text-ink">
         Todos os verbetes
       </h1>
 
       {error && (
-        <p className="mt-6 font-sans text-sm text-red-600">
+        <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           Não foi possível carregar os verbetes.
         </p>
       )}
@@ -58,55 +32,40 @@ export default async function AdminVerbetesPage() {
       <table className="w-full mt-8 font-sans text-sm border-collapse">
         <thead>
           <tr className="text-left border-b border-line text-ink/50 font-mono text-xs uppercase tracking-widest">
-            <th className="py-2">Verbete</th>
-            <th className="py-2">Status</th>
-            <th className="py-2">Categoria</th>
-            <th className="py-2">Pesquisador</th>
-            <th className="py-2 text-right">Ação</th>
+            <th className="py-3">Verbete</th>
+            <th className="py-3">Status</th>
+            <th className="py-3">Categoria</th>
+            <th className="py-3">Pesquisador</th>
           </tr>
         </thead>
 
         <tbody>
           {verbetes.map((p) => (
-            <tr key={p.id} className="border-b border-line/60">
-              <td className="py-3 text-ink">
+            <tr
+              key={p.id}
+              className="border-b border-line/60"
+            >
+              <td className="py-4 text-ink">
                 {p.nome_destaque}
               </td>
 
-              <td className="py-3 font-mono text-[11px] uppercase tracking-widest text-moss">
+              <td className="py-4 font-mono text-[11px] uppercase tracking-widest text-moss">
                 {STATUS_LABEL[p.status] ?? p.status}
               </td>
 
-              <td className="py-3 text-ink/60">
+              <td className="py-4 text-ink/60">
                 {p.categoria_id ?? "—"}
               </td>
 
-              <td className="py-3 text-ink/60">
+              <td className="py-4 text-ink/60">
                 {p.autor_id ?? "—"}
-              </td>
-
-              <td className="py-3 text-right">
-                <form action={excluirVerbete}>
-                  <input
-                    type="hidden"
-                    name="id"
-                    value={p.id}
-                  />
-
-                  <button
-                    type="submit"
-                    className="font-sans text-xs text-red-600 hover:underline"
-                  >
-                    Excluir
-                  </button>
-                </form>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      {verbetes.length === 0 && (
+      {verbetes.length === 0 && !error && (
         <p className="font-sans text-ink/50 mt-10 italic">
           Nenhum verbete cadastrado ainda.
         </p>
