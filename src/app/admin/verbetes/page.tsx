@@ -25,10 +25,11 @@ async function excluirVerbete(formData: FormData) {
   });
 
   if (error) {
-    console.error("Erro ao excluir verbete:", error);
+    console.error("ERRO RPC excluir_verbete_admin:", error);
+
     redirect(
       `/admin/verbetes?erro=${encodeURIComponent(
-        "Não foi possível excluir o verbete."
+        error.message || "Erro desconhecido ao excluir o verbete."
       )}`
     );
   }
