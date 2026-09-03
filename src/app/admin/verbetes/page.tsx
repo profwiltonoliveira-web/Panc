@@ -25,8 +25,11 @@ async function excluirVerbete(formData: FormData) {
   });
 
   if (error) {
+    console.error("Erro ao excluir verbete:", error);
     redirect(
-      `/admin/verbetes?erro=${encodeURIComponent(error.message)}`
+      `/admin/verbetes?erro=${encodeURIComponent(
+        "Não foi possível excluir o verbete."
+      )}`
     );
   }
 
@@ -34,7 +37,14 @@ async function excluirVerbete(formData: FormData) {
   redirect("/admin/verbetes?excluido=1");
 }
 
-export default async function AdminVerbetesPage() {
+export default async function AdminVerbetesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{
+    erro?: string;
+    excluido?: string;
+  }>;
+}) {
   const supabase = createClient();
 
   const { data, error } = await supabase
@@ -44,12 +54,26 @@ export default async function AdminVerbetesPage() {
 
   const verbetes = data ?? [];
 
+  const params = searchParams ? await searchParams : {};
+
   return (
     <div className="max-w-6xl mx-auto px-5 sm:px-8 py-12">
 
       <h1 className="font-display text-3xl text-ink">
         Todos os verbetes
       </h1>
+
+      {params.excluido === "1" && (
+        <p className="mt-6 rounded-md border border-line bg-moss/10 px-4 py-3 text-sm text-ink">
+          Verbete excluído com sucesso.
+        </p>
+      )}
+
+      {params.erro && (
+        <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {params.erro}
+        </p>
+      )}
 
       {error && (
         <p className="mt-6 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
