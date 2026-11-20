@@ -92,3 +92,6 @@ h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: v
 .spark-dot { fill: var(--accent); }
 .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
 .up { color: var(--suspeito); } .down { color: var(--excelente); }
+
+.card.other { opacity: .72; border-style: dashed; }
+.star:disabled { opacity: .3; cursor: not-allowed; }

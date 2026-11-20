@@ -8,7 +8,8 @@
 
 const API_URL = 'https://api.mercadolibre.com/sites/MLB/search';
 const LIST_URL = 'https://lista.mercadolivre.com.br/';
-const ML_HOST_RE = /^https:\/\/([a-z0-9-]+\.)*mercadoli(vre|bre)\.com(\.br)?\//i;
+// Hosts aceitos para links de anúncio (hostname exato ou subdomínio).
+const ML_HOST_RE = /^([a-z0-9-]+\.)*mercadoli(vre|bre)\.com(\.br)?$/i;
 
 export class SearchError extends Error {
   constructor(message, details = []) {
@@ -67,7 +68,7 @@ export function normalizeApiItem(r) {
     shipping: free ? 0 : null, // null = frete não informado
     freeShipping: !!free,
     condition: r.condition === 'used' ? 'usado' : r.condition === 'new' ? 'novo' : null,
-    image: upgradeImage(r.thumbnail || ''),
+    image: safeImage(r.thumbnail || ''),
     link,
     seller: (r.seller && (r.seller.nickname || r.seller.id)) || null,
     installments: r.installments ? `${r.installments.quantity}x R$ ${r.installments.amount}` : null
@@ -76,17 +77,28 @@ export function normalizeApiItem(r) {
 
 // ---------- 2) Página pública ----------
 async function searchViaHtml(q, signal) {
-  const slug = q.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = slugify(q);
+  if (!slug) throw new Error('termo de busca sem letras ou números');
   const res = await fetch(LIST_URL + encodeURIComponent(slug), { signal, credentials: 'include' });
+  // O ML redireciona para /gz/account-verification quando suspeita de acesso automatizado.
+  if (/account-verification|\/gz\/|captcha/i.test(res.url)) throw new Error(VERIFY_MSG);
+  if (res.status === 403) throw new Error('HTTP 403: acesso negado pelo Mercado Livre. Abra mercadolivre.com.br em uma aba (se pedir verificação, conclua) e tente de novo. Redes de empresa/VPN/servidores podem ser bloqueadas.');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const items = parseSearchHtml(doc);
-  if (!items.length && /captcha|account-verification|suspicious/i.test(html)) {
-    throw new Error('o Mercado Livre pediu verificação (captcha). Abra mercadolivre.com.br em uma aba, conclua a verificação e tente de novo.');
+  if (!items.length && /captcha|account-verification|suspicious/i.test(html)) throw new Error(VERIFY_MSG);
+  if (!items.length && !/nenhum resultado|não há anúncios|nao ha anuncios|verifique se a palavra/i.test(html)) {
+    throw new Error('a página carregou, mas nenhum anúncio foi reconhecido (o layout do site pode ter mudado).');
   }
   return items;
+}
+
+const VERIFY_MSG = 'o Mercado Livre pediu verificação de segurança. Abra mercadolivre.com.br em uma aba, conclua a verificação e tente de novo.';
+
+export function slugify(q) {
+  return String(q).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 // Exportada para testes. Recebe um Document.
@@ -95,8 +107,8 @@ export function parseSearchHtml(doc) {
   const seen = new Set();
   const out = [];
   for (const card of cards) {
-    // evita duplicar quando li contém o poly-card
-    if (card.matches('div.poly-card') && card.closest('li.ui-search-layout__item')) continue;
+    // evita processar o mesmo anúncio duas vezes quando um card contém outro
+    if (card.parentElement && card.parentElement.closest('li.ui-search-layout__item, div.poly-card, div.ui-search-result__wrapper')) continue;
     const item = parseCard(card);
     if (item && !seen.has(item.id)) {
       seen.add(item.id);
@@ -106,33 +118,44 @@ export function parseSearchHtml(doc) {
   return out;
 }
 
+// querySelector com lista separada por vírgula devolve o primeiro na ORDEM DO DOCUMENTO,
+// não na ordem de prioridade. pick() respeita a prioridade.
+function pick(root, selectors) {
+  for (const s of selectors) {
+    const el = root.querySelector(s);
+    if (el) return el;
+  }
+  return null;
+}
+
 function parseCard(card) {
-  const a = card.querySelector('a.poly-component__title, h3 a, a.ui-search-link, a.ui-search-item__group__element, a[href*="mercadolivre.com.br"]');
-  const titleEl = card.querySelector('.poly-component__title, .ui-search-item__title, h2, h3');
+  // Link e título vêm do MESMO elemento sempre que possível, para o link apontar para o anúncio do título.
+  const a = pick(card, ['a.poly-component__title', 'h3 a[href]', 'h2 a[href]', 'a.ui-search-item__group__element', 'a.ui-search-link']);
+  const titleEl = pick(card, ['.poly-component__title', '.ui-search-item__title', 'h3', 'h2']);
   const title = clean((titleEl && titleEl.textContent) || (a && a.textContent));
   const link = a ? safeLink(a.getAttribute('href')) : null;
   if (!title || !link) return null;
 
-  const currentBox = card.querySelector('.poly-price__current, .ui-search-price__second-line, .ui-search-price--size-medium') || card;
-  const price = readMoney(firstNonPrevious(currentBox));
+  const currentBox = pick(card, ['.poly-price__current', '.ui-search-price__second-line', '.ui-search-price--size-medium']);
+  const price = readMoney(firstCurrentAmount(currentBox || card));
   if (price == null) return null;
-  const prevEl = card.querySelector('s.andes-money-amount, .andes-money-amount--previous, .ui-search-price__original-value');
+  const prevEl = pick(card, ['s.andes-money-amount', '.andes-money-amount--previous', '.ui-search-price__original-value']);
   let originalPrice = prevEl ? readMoney(prevEl) : null;
   if (originalPrice != null && originalPrice <= price) originalPrice = null;
 
   const text = clean(card.textContent).toLowerCase();
-  const freeShipping = /frete gr[aá]tis|envio gr[aá]tis/.test(text);
+  const freeShipping = /frete gr[aá]tis|envio gr[aá]tis|chegar[aá] gr[aá]tis/.test(text);
   let shipping = freeShipping ? 0 : null;
   if (!freeShipping) {
     const m = text.match(/frete\s*(?:de)?\s*r\$\s*([\d.]+(?:,\d{2})?)/);
     if (m) shipping = parseBRL(m[1]);
   }
-  const condition = /\busado\b/.test(text) ? 'usado' : /\brecondicionado\b/.test(text) ? 'recondicionado' : null;
+  const condition = /\brecondicionado\b/.test(text) ? 'recondicionado' : /\busado\b/.test(text) ? 'usado' : null;
 
-  const img = card.querySelector('img');
+  const img = pick(card, ['img.poly-component__picture', 'img']);
   const image = img ? (img.getAttribute('data-src') || img.getAttribute('src') || '') : '';
 
-  const sellerEl = card.querySelector('.poly-component__seller, .ui-search-official-store-label');
+  const sellerEl = pick(card, ['.poly-component__seller', '.ui-search-official-store-label']);
   return {
     id: idFromUrl(link) || titleKey(title),
     title,
@@ -142,17 +165,18 @@ function parseCard(card) {
     shipping,
     freeShipping,
     condition,
-    image: image.startsWith('https://') ? upgradeImage(image) : '',
+    image: safeImage(image),
     link,
     seller: sellerEl ? clean(sellerEl.textContent).replace(/^por\s+/i, '') : null,
     installments: null
   };
 }
 
-function firstNonPrevious(box) {
-  const all = box.querySelectorAll('.andes-money-amount');
-  for (const el of all) {
+// Primeiro valor que não seja o preço riscado ("de") nem parcela ("12x R$ ...").
+function firstCurrentAmount(box) {
+  for (const el of box.querySelectorAll('.andes-money-amount')) {
     if (el.tagName === 'S' || el.classList.contains('andes-money-amount--previous') || el.closest('s')) continue;
+    if (el.closest('.poly-price__installments, .ui-search-installments, .poly-component__installments')) continue;
     return el;
   }
   return null;
@@ -176,31 +200,58 @@ export function parseBRL(s) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * Identificador estável do anúncio a partir do link.
+ *  - wid=MLB123 / item_id=MLB123 (anúncio específico dentro de página de catálogo) → "MLB123"
+ *  - /MLB-123-titulo-_JM (anúncio)                                                   → "MLB123"
+ *  - /p/MLB123 (produto de catálogo, vários vendedores)                              → "P:MLB123"
+ *  - /up/MLBU123 (produto de usuário)                                                → "U:MLBU123"
+ * Só o CAMINHO é analisado: parâmetros como container_id=MLB779362 ou
+ * c_category_id=MLB263532 são IDs de categoria/vitrine e não identificam anúncios.
+ */
 export function idFromUrl(url) {
   if (!url) return null;
-  const wid = url.match(/[?&#]wid=(MLB\d+)/i);
-  if (wid) return wid[1].toUpperCase();
-  const m = url.match(/MLB-?U?(\d{6,})/i);
-  return m ? 'MLB' + m[1] : null;
+  let u;
+  try { u = new URL(url, 'https://www.mercadolivre.com.br/'); } catch { return null; }
+  const hashParams = new URLSearchParams(u.hash.replace(/^#/, ''));
+  const wid = u.searchParams.get('wid') || u.searchParams.get('item_id') || hashParams.get('wid');
+  if (wid && /^MLB\d{6,}$/i.test(wid)) return wid.toUpperCase();
+  const path = u.pathname;
+  let m = path.match(/\/MLB-(\d{6,})(?:[-_/]|$)/i);
+  if (m) return 'MLB' + m[1];
+  m = path.match(/\/p\/(MLB\d{6,})(?:[/?]|$)/i);
+  if (m) return 'P:' + m[1].toUpperCase();
+  m = path.match(/\/up\/(MLBU\d{6,})(?:[/?]|$)/i);
+  if (m) return 'U:' + m[1].toUpperCase();
+  m = path.match(/\/(MLB\d{6,})(?:[/?_-]|$)/i);
+  if (m) return m[1].toUpperCase();
+  return null;
 }
 
 function titleKey(title) {
   return 'T:' + String(title || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 80);
 }
 
-function safeLink(href) {
+export function safeLink(href) {
   if (!href) return null;
   try {
     const u = new URL(href, 'https://www.mercadolivre.com.br/');
-    return ML_HOST_RE.test(u.href) ? u.href : null;
+    return u.protocol === 'https:' && ML_HOST_RE.test(u.hostname) ? u.href : null;
   } catch {
     return null;
   }
 }
 
-function upgradeImage(url) {
-  // thumbnails da API vêm em baixa resolução (-I.jpg); -O é a versão maior.
-  return url.replace(/^http:/, 'https:').replace(/-I\.(jpg|webp)$/i, '-O.$1');
+// Só aceita imagens do CDN do Mercado Livre (evita carregar pixels de rastreamento de terceiros).
+export function safeImage(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(String(url).replace(/^http:/, 'https:'));
+    if (u.protocol !== 'https:' || !/(^|\.)mlstatic\.com$/i.test(u.hostname)) return '';
+    return u.href.replace(/-I\.(jpg|webp)$/i, '-O.$1'); // thumbnails da API: -I (pequena) → -O (maior)
+  } catch {
+    return '';
+  }
 }
 
 function clean(s) {

@@ -1,10 +1,11 @@
 // Menu de contexto: selecione um texto em qualquer página → "Buscar no Radar de Ofertas".
+// removeAll evita o erro "duplicate id" quando a extensão é atualizada/recarregada.
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
+  chrome.contextMenus.removeAll(() => chrome.contextMenus.create({
     id: 'radar-buscar',
     title: 'Buscar "%s" no Radar de Ofertas',
     contexts: ['selection']
-  });
+  }));
 });
 
 chrome.contextMenus.onClicked.addListener((info) => {

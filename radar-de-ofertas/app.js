@@ -32,7 +32,7 @@ $('#searchForm').addEventListener('submit', (e) => {
   e.preventDefault();
   runSearch($('#q').value);
 });
-['#fFree', '#fNew', '#fLabel', '#fSort'].forEach((s) => $(s).addEventListener('change', renderResults));
+['#fFree', '#fNew', '#fEquiv', '#fLabel', '#fSort'].forEach((s) => $(s).addEventListener('change', renderResults));
 
 async function runSearch(query) {
   query = query.trim();
@@ -47,10 +47,15 @@ async function runSearch(query) {
   try {
     const { source, items } = await searchMercadoLivre(query, { signal: controller.signal });
     const history = await store.getPriceHistory();
-    const analysis = analyze(items, history);
+    const analysis = analyze(items, history, Date.now(), query);
     current = { query, source, analysis };
-    await store.recordSearch(query, source, analysis);
     setStatus(null);
+    try {
+      await store.recordSearch(query, source, analysis);
+    } catch (err) {
+      // Falha ao salvar não pode esconder resultados já obtidos.
+      setStatus('Resultados exibidos, mas o histórico não pôde ser salvo: ' + (err.message || err), [], true);
+    }
     renderSummary();
     renderResults();
   } catch (e) {
@@ -93,11 +98,15 @@ function renderSummary() {
   };
   const src = document.createElement('div');
   src.className = 'src';
-  src.textContent = `Fonte: ${current.source} · ${stats.count} anúncios · frete conhecido em ${stats.shippingKnownCount} · diferença entre o mais barato e o mais caro: ${stats.spreadPct.toFixed(0)}%` + (stats.refMin > stats.min ? ' (anúncios muito abaixo da mediana foram desconsiderados como referência)' : '');
+  const money = (n) => (n == null ? '—' : 'R$ ' + fmt(n));
+  const groupTxt = stats.mainGroup && stats.mainGroup !== 'padrão' ? ` (variante: ${stats.mainGroup})` : '';
+  src.textContent = `Fonte: ${current.source} · ${stats.count} anúncios, ${stats.equivalentCount} equivalentes à busca · valores do maior grupo de equivalentes${groupTxt}: ${stats.mainGroupCount} anúncios` +
+    (stats.spreadPct != null ? ` · diferença mais barato → mais caro: ${stats.spreadPct.toFixed(0)}%` : '') +
+    ` · frete conhecido em ${stats.shippingKnownCount}.`;
   box.replaceChildren(
-    cell('R$ ' + fmt(stats.refMin), 'Menor total'),
-    cell('R$ ' + fmt(stats.median), 'Mediana'),
-    cell('R$ ' + fmt(stats.max), 'Maior total'),
+    cell(money(stats.refMin), 'Menor total'),
+    cell(money(stats.median), 'Mediana'),
+    cell(money(stats.max), 'Maior total'),
     cell(String(current.analysis.items.filter((i) => i.label === 'excelente' || i.label === 'boa').length), 'Oportunidades'),
     src
   );
@@ -106,14 +115,16 @@ function renderSummary() {
 
 function filteredItems() {
   let list = current.analysis.items.slice();
+  if ($('#fEquiv').checked) list = list.filter((i) => i.equivalent);
   if ($('#fFree').checked) list = list.filter((i) => i.freeShipping);
   if ($('#fNew').checked) list = list.filter((i) => i.condition !== 'usado' && i.condition !== 'recondicionado');
   const lbl = $('#fLabel').value;
   if (lbl) list = list.filter((i) => i.label === lbl);
   const sort = $('#fSort').value;
-  if (sort === '-total') list.sort((a, b) => b.total - a.total);
-  else if (sort === 'discount') list.sort((a, b) => (b.claimedDiscount || 0) - (a.claimedDiscount || 0));
-  else list.sort((a, b) => a.total - b.total);
+  const eqFirst = (a, b) => b.equivalent - a.equivalent; // não equivalentes sempre no fim
+  if (sort === '-total') list.sort((a, b) => eqFirst(a, b) || b.total - a.total);
+  else if (sort === 'discount') list.sort((a, b) => eqFirst(a, b) || (b.claimedDiscount || 0) - (a.claimedDiscount || 0));
+  else list.sort((a, b) => eqFirst(a, b) || a.total - b.total);
   return list;
 }
 
@@ -135,6 +146,7 @@ async function renderResults() {
 function renderCard(it, isCheapest) {
   const node = $('#resultTpl').content.firstElementChild.cloneNode(true);
   if (isCheapest) node.classList.add('best');
+  if (!it.equivalent) node.classList.add('other');
   node.querySelector('.thumb').href = it.link;
   const img = node.querySelector('img');
   if (it.image) { img.addEventListener('error', () => { img.style.visibility = 'hidden'; }); img.src = it.image; } else img.remove();
@@ -153,8 +165,13 @@ function renderCard(it, isCheapest) {
   else if (it.shipping != null) meta.push('Frete R$ ' + fmt(it.shipping));
   else meta.push('Frete não informado');
   meta.push('Total R$ ' + fmt(it.total) + (it.shippingKnown ? '' : '*'));
-  meta.push(isCheapest ? 'Mais barato' : `${it.diffVsCheapest >= 0 ? '+' : ''}${it.diffVsCheapest.toFixed(1)}% vs mais barato`);
-  if (it.diffVsMedian != null) meta.push(`${it.diffVsMedian >= 0 ? '+' : ''}${it.diffVsMedian.toFixed(1)}% vs mediana`);
+  if (!it.equivalent) meta.push('Produto diferente da busca?');
+  else if (it.groupSize < 2) meta.push('Sem anúncio equivalente para comparar');
+  else {
+    meta.push(isCheapest ? 'Mais barato do grupo' : `${it.diffVsCheapest >= 0 ? '+' : ''}${it.diffVsCheapest.toFixed(1)}% vs mais barato equivalente`);
+    if (it.diffVsMedian != null) meta.push(`${it.diffVsMedian >= 0 ? '+' : ''}${it.diffVsMedian.toFixed(1)}% vs mediana`);
+    if (it.group !== 'padrão') meta.push('grupo: ' + it.group);
+  }
   if (it.condition) meta.push(it.condition);
   if (it.seller) meta.push(it.seller);
   node.querySelector('.meta').textContent = meta.join(' · ');
@@ -168,8 +185,16 @@ function renderCard(it, isCheapest) {
 
   const star = node.querySelector('.star');
   const setStar = (on) => { star.textContent = on ? '★' : '☆'; star.classList.toggle('on', on); };
-  setStar(!!watch[it.id]);
-  star.addEventListener('click', async () => setStar(await store.toggleWatch(it)));
+  if (String(it.id).startsWith('T:')) {
+    star.disabled = true;
+    star.title = 'Link sem identificador de anúncio: não é possível acompanhar o preço.';
+  } else {
+    setStar(!!watch[it.id]);
+    star.addEventListener('click', async () => {
+      star.disabled = true;
+      try { setStar(await store.toggleWatch(it)); } finally { star.disabled = false; }
+    });
+  }
   return node;
 }
 
@@ -184,7 +209,7 @@ async function renderHistory() {
     const b = document.createElement('button'); b.className = 'link'; b.textContent = s.q;
     b.addEventListener('click', () => { $('#q').value = s.q; showTab('buscar'); runSearch(s.q); });
     const sub = document.createElement('div'); sub.className = 'sub';
-    sub.textContent = `${new Date(s.t).toLocaleString('pt-BR')} · ${s.count} anúncios · menor R$ ${fmt(s.min)} · mediana R$ ${fmt(s.median)}`;
+    sub.textContent = `${new Date(s.t).toLocaleString('pt-BR')} · ${s.count} anúncios` + (s.min != null ? ` · menor R$ ${fmt(s.min)} · mediana R$ ${fmt(s.median)}` : '');
     g.append(b, sub);
     li.append(g);
     return li;
