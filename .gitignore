@@ -4,3 +4,4 @@ node_modules
 .env.local
 .DS_Store
 *.tsbuildinfo
+dist/radar-de-ofertas-v0.2.0/
