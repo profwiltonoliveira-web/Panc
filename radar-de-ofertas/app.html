@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Radar de Ofertas</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><img src="icons/icon32.png" alt="" width="22" height="22"> Radar de Ofertas</div>
+    <button id="openFull" class="ghost" title="Abrir em uma aba">⤢ Tela cheia</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="buscar" class="active">Buscar</button>
+    <button role="tab" data-tab="historico">Histórico</button>
+    <button role="tab" data-tab="acompanhando">Acompanhando</button>
+  </nav>
+
+  <main>
+    <section id="tab-buscar" class="tab active">
+      <form id="searchForm" class="search">
+        <input id="q" type="search" placeholder="Ex.: fone bluetooth jbl" autocomplete="off" required maxlength="120">
+        <button type="submit" id="searchBtn">Buscar</button>
+      </form>
+      <div class="filters">
+        <label><input type="checkbox" id="fFree"> Só frete grátis</label>
+        <label><input type="checkbox" id="fNew"> Só novos</label>
+        <select id="fLabel">
+          <option value="">Todas as classificações</option>
+          <option value="excelente">Excelente oportunidade</option>
+          <option value="boa">Boa oportunidade</option>
+          <option value="regular">Preço regular</option>
+          <option value="suspeito">Desconto suspeito</option>
+        </select>
+        <select id="fSort">
+          <option value="total">Menor preço total</option>
+          <option value="-total">Maior preço total</option>
+          <option value="discount">Maior desconto anunciado</option>
+        </select>
+      </div>
+      <div id="status" class="status" hidden></div>
+      <div id="summary" class="summary" hidden></div>
+      <ul id="results" class="results"></ul>
+      <p class="disclaimer">Classificações são estimativas. Um desconto só é tratado como real quando há histórico de preços registrado por esta extensão. "Total" inclui frete apenas quando informado.</p>
+    </section>
+
+    <section id="tab-historico" class="tab">
+      <div class="row-actions">
+        <button id="exportBtn" class="ghost">Exportar JSON</button>
+        <button id="clearBtn" class="ghost danger">Apagar histórico</button>
+      </div>
+      <h3>Pesquisas recentes</h3>
+      <ul id="searchHistory" class="list"></ul>
+      <h3>Preços observados</h3>
+      <input id="histFilter" type="search" placeholder="Filtrar produtos…">
+      <ul id="priceHistory" class="list"></ul>
+    </section>
+
+    <section id="tab-acompanhando" class="tab">
+      <p class="hint">Marque ★ em um resultado para acompanhá-lo. Os preços são atualizados sempre que você faz uma busca que inclua o anúncio.</p>
+      <ul id="watchList" class="list"></ul>
+    </section>
+  </main>
+
+  <template id="resultTpl">
+    <li class="card">
+      <a class="thumb" target="_blank" rel="noopener noreferrer"><img alt="" loading="lazy" referrerpolicy="no-referrer"></a>
+      <div class="info">
+        <a class="title" target="_blank" rel="noopener noreferrer"></a>
+        <div class="prices">
+          <span class="price"></span>
+          <s class="orig"></s>
+          <span class="off"></span>
+        </div>
+        <div class="meta"></div>
+        <div class="badge-row"><span class="badge"></span><span class="conf"></span></div>
+        <details class="why"><summary>Por quê?</summary><ul></ul></details>
+      </div>
+      <button class="star" title="Acompanhar preço">☆</button>
+    </li>
+  </template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
