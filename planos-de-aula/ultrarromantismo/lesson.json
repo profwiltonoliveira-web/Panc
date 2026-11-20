@@ -1,0 +1,932 @@
+{
+  "shared": {
+    "grade": "2ª série do Ensino Médio",
+    "subject": "Língua Portuguesa e Literatura Brasileira",
+    "duration": 100,
+    "standard_code": "BNCC EM13LP52",
+    "standard_text": "Analisar obras significativas das literaturas brasileiras e de outros países e povos, em especial a portuguesa, a indígena, a africana e a latino-americana, com base em ferramentas da crítica literária (estrutura da composição, estilo, aspectos discursivos) ou outros critérios relacionados a diferentes matrizes culturais, considerando o contexto de produção (visões de mundo, diálogos com outros textos, inserções em movimentos estéticos e culturais etc.) e o modo como dialogam com o presente.",
+    "anchor_task": {
+      "teacher": [
+        "Projete ou escreva a pergunta do quadro abaixo. Não comente os poemas ainda.",
+        "Cada estudante responde sozinho, por escrito, em silêncio (4 min).",
+        "Recolha duas ou três posições em voz alta, sem julgar. A pergunta volta no fim da Aula 2."
+      ],
+      "student": {
+        "type": "callout",
+        "kind": "student-task",
+        "label": "Pergunta de abertura",
+        "text": "Em 1850, jovens poetas de 20 anos escreviam sem parar sobre morrer. Essa dor era sincera ou era uma pose literária, uma moda da época? Escreva sua opinião em 3 a 4 linhas e explique por quê."
+      }
+    },
+    "texto_a": {
+      "type": "source_card",
+      "title": "Texto A — “Se eu morresse amanhã”",
+      "author": "Álvares de Azevedo",
+      "date": "Lira dos Vinte Anos, 1853 (póstumo)",
+      "origin": "Domínio público",
+      "excerpt": "Se eu morresse amanhã, viria ao menos\nFechar meus olhos minha triste irmã;\nMinha mãe de saudades morreria\nSe eu morresse amanhã!\n\nQuanta glória pressinto em meu futuro!\nQue aurora de porvir e que manhã!\nEu perdera chorando essas coroas\nSe eu morresse amanhã!\n\nQue sol! que céu azul! que doce n'alva\nAcorda a natureza mais louçã!\nNão me batera tanto amor no peito\nSe eu morresse amanhã!\n\nMas essa dor da vida que devora\nA ânsia de glória, o dolorido afã...\nA dor no peito emudecera ao menos\nSe eu morresse amanhã!"
+    },
+    "texto_b": {
+      "type": "source_card",
+      "title": "Texto B — “Meus oito anos” (duas primeiras estrofes)",
+      "author": "Casimiro de Abreu",
+      "date": "As Primaveras, 1859",
+      "origin": "Domínio público",
+      "excerpt": "Oh! que saudades que tenho\nDa aurora da minha vida,\nDa minha infância querida\nQue os anos não trazem mais!\nQue amor, que sonhos, que flores,\nNaquelas tardes fagueiras\nÀ sombra das bananeiras,\nDebaixo dos laranjais!\n\nComo são belos os dias\nDo despontar da existência!\n— Respira a alma inocência\nComo perfumes a flor;\nO mar é — lago sereno,\nO céu — um manto azulado,\nO mundo — um sonho dourado,\nA vida — um hino d'amor!"
+    },
+    "texto_c": {
+      "type": "source_card",
+      "title": "Texto C — Prefácio da segunda parte da Lira dos Vinte Anos (trecho)",
+      "author": "Álvares de Azevedo",
+      "date": "1853",
+      "origin": "Domínio público",
+      "excerpt": "Cuidado, leitor, ao voltar esta página!\nAqui dissipa-se o mundo visionário e platônico. [...]\nA razão é simples. É que a unidade deste livro funda-se numa binomia. Duas almas que moram nas cavernas de um cérebro pouco mais ou menos de poeta escreveram este livro, verdadeira medalha de duas faces."
+    },
+    "texto_d": {
+      "type": "source_card",
+      "title": "Texto D — “É ela! É ela! É ela! É ela!” (trecho)",
+      "author": "Álvares de Azevedo",
+      "date": "Lira dos Vinte Anos, segunda parte, 1853",
+      "origin": "Domínio público",
+      "excerpt": "É ela! é ela! — murmurei tremendo,\nE o eco ao longe murmurou — é ela!\nEu a vi — minha fada aérea e pura —\nA minha lavadeira na janela!\n\nDessas águas-furtadas onde eu moro\nEu a vejo estendendo no telhado\nOs vestidos de chita, as saias brancas;\nEu a vejo e suspiro enamorado!\n\n[...]\n\nComo dormia! que profundo sono!...\nTinha na mão o ferro do engomado...\nComo roncava maviosa e pura!...\nQuase caí na rua desmaiado!\n\n[...]\n\nÉ ela! é ela! — repeti tremendo;\nMas cantou nesse instante uma coruja...\nAbri cioso a página secreta...\nOh! meu Deus! era um rol de roupa suja!"
+    },
+    "chave_anotacao": {
+      "type": "table",
+      "headers": [
+        "Marca",
+        "Use para"
+      ],
+      "rows": [
+        [
+          "Sublinhe",
+          "Palavras de morte, dor, noite ou tédio"
+        ],
+        [
+          "Circule",
+          "O lugar ou o tempo para onde o eu lírico foge"
+        ],
+        [
+          "Escreva ! na margem",
+          "Exclamação ou reticência que muda o tom do verso"
+        ],
+        [
+          "Escreva ? na margem",
+          "Verso que você não entendeu e quer discutir"
+        ]
+      ]
+    },
+    "organizador": {
+      "type": "fill_table",
+      "headers": [
+        "Texto",
+        "Para onde o eu lírico foge, ou o que o texto ironiza",
+        "Verso que comprova (copie)",
+        "Efeito de sentido desse verso"
+      ],
+      "rows": [
+        [
+          "A — Se eu morresse amanhã",
+          "",
+          "",
+          ""
+        ],
+        [
+          "B — Meus oito anos",
+          "",
+          "",
+          ""
+        ],
+        [
+          "C — Prefácio",
+          "",
+          "",
+          ""
+        ],
+        [
+          "D — É ela!",
+          "",
+          "",
+          ""
+        ]
+      ],
+      "row_height_pt": 70
+    },
+    "q1": {
+      "student": "**Texto A.** Nas três primeiras estrofes, morrer significa perder algo. Na última, a morte passa a ser alívio. Em que verso acontece essa virada? O que ela revela sobre o eu lírico?",
+      "teacher": "Resposta forte cita “Mas essa dor da vida que devora” e nota o “Mas”. Explica que a morte silenciaria a “dor da vida”: é o mal do século."
+    },
+    "q2": {
+      "student": "**Texto B.** Que palavras mostram que essa infância é idealizada, e não apenas lembrada? O que o verso “Que os anos não trazem mais!” diz sobre o presente do eu lírico?",
+      "teacher": "Resposta forte cita as metáforas “O mundo — um sonho dourado” e “A vida — um hino d'amor”. Conclui que o presente é triste: a infância é fuga no tempo."
+    },
+    "q3": {
+      "student": "**Textos C e D.** O prefácio fala em “medalha de duas faces”. Em que verso do Texto D a “fada aérea e pura” vira outra coisa? Que efeito essa virada produz?",
+      "teacher": "Resposta forte cita “A minha lavadeira na janela!” ou “era um rol de roupa suja!”. Nomeia o efeito: quebra de expectativa que ironiza a mulher idealizada."
+    },
+    "q4": {
+      "student": "**Parágrafo argumentativo.** A dor ultrarromântica era sincera ou uma pose literária? Defenda sua posição em um parágrafo de 8 a 10 linhas. Cite pelo menos dois textos, um de cada aula, e responda a um argumento contrário.",
+      "teacher": "Posição defensável dos dois lados. O contra-argumento é obrigatório nesta série."
+    },
+    "vocabulario": {
+      "type": "table",
+      "rows": [
+        [
+          "**Mal do século**",
+          "Tédio, melancolia e pessimismo que marcam a juventude romântica; aparece no Texto A como “dor da vida”."
+        ],
+        [
+          "**Evasão (escapismo)**",
+          "Fuga do presente para a morte, o sonho, a noite ou a infância; Textos A e B."
+        ],
+        [
+          "**Idealização**",
+          "Representar algo como perfeito, acima do real: a infância em B, a “fada aérea e pura” em D."
+        ],
+        [
+          "**Binomia (ironia romântica)**",
+          "Termo do próprio Álvares de Azevedo para as “duas faces” da Lira: uma sentimental, outra irônica; Texto C."
+        ]
+      ]
+    },
+    "dificuldades": {
+      "type": "table",
+      "headers": [
+        "O que os estudantes fazem",
+        "Por que acontece",
+        "Intervenção do professor"
+      ],
+      "rows": [
+        [
+          "Diz que “Álvares de Azevedo queria morrer” ao ler o Texto A.",
+          "Confunde autor e eu lírico; a morte do poeta aos 20 anos reforça a leitura biográfica.",
+          "Pergunte: quem fala no poema? Lembre que o Texto D, do mesmo autor, ri do mesmo tipo de sentimentalismo."
+        ],
+        [
+          "Chama “Meus oito anos” de “poema alegre”.",
+          "Lê só o conteúdo da lembrança e ignora o tempo presente de quem lembra.",
+          "Aponte “Que os anos não trazem mais!” e pergunte: como está a vida de quem fala agora?"
+        ],
+        [
+          "Diz que o Texto D “não é romântico” ou é de outra escola.",
+          "Associa Romantismo apenas a sentimentalismo sério.",
+          "Volte ao Texto C: as duas faces estão no mesmo livro, por escolha do autor."
+        ]
+      ]
+    },
+    "observar": {
+      "type": "list",
+      "items": [
+        "**Copia o verso exato no organizador.** A análise depende de evidência textual. *Se falta, pergunte: em que verso você viu isso?*",
+        "**Nomeia o efeito, não só o recurso.** “Tem exclamação” é identificação; “a exclamação torna a queda cômica” é análise. *Pergunte: o que muda no tom?*",
+        "**Separa eu lírico e autor.** É a base para ler a ironia do Texto D. *Se misturar, retome a primeira linha de dificuldades.*",
+        "**No parágrafo, responde a um argumento contrário.** Exigência da 2ª série. *Aponte o modelo de frase da questão 4.*"
+      ]
+    },
+    "verificacao_final": {
+      "teacher": "Recolha as folhas ao final. Compare com a resposta da abertura da Aula 1.",
+      "student": {
+        "type": "callout",
+        "kind": "student-task",
+        "label": "Para fechar",
+        "text": "Releia sua resposta da Pergunta de abertura. Sua opinião mudou, ficou igual ou ficou mais complexa? Que verso dos textos você usaria agora para defendê-la?"
+      }
+    },
+    "classificacao": {
+      "type": "cards",
+      "items": [
+        {
+          "title": "Atingiu",
+          "text": "Diz como a opinião mudou ou se manteve e cita um verso que de fato sustenta a posição, inclusive a ironia do Texto D."
+        },
+        {
+          "title": "Quase lá",
+          "text": "Toma posição e cita um verso, mas o verso não sustenta a ideia ou não explica a relação."
+        },
+        {
+          "title": "Precisa retomar",
+          "text": "Repete a resposta da abertura sem citar nenhum verso dos textos, ou só resume um poema."
+        }
+      ]
+    }
+  },
+  "documents": [
+    {
+      "id": "lesson_plan",
+      "audience": "teacher",
+      "eyebrow": "2ª série do Ensino Médio · Língua Portuguesa e Literatura Brasileira",
+      "title": "Ultrarromantismo: dor sincera ou pose literária?",
+      "meta": "2 aulas de 50 minutos · Álvares de Azevedo e Casimiro de Abreu · BNCC EM13LP52",
+      "sections": [
+        {
+          "heading": "Visão geral",
+          "blocks": [
+            {
+              "type": "callout",
+              "kind": "special",
+              "label": "Habilidade principal — BNCC EM13LP52",
+              "text": "Analisar obras significativas das literaturas brasileiras e de outros países e povos, em especial a portuguesa, a indígena, a africana e a latino-americana, com base em ferramentas da crítica literária (estrutura da composição, estilo, aspectos discursivos) ou outros critérios relacionados a diferentes matrizes culturais, considerando o contexto de produção (visões de mundo, diálogos com outros textos, inserções em movimentos estéticos e culturais etc.) e o modo como dialogam com o presente."
+            },
+            {
+              "type": "labeled",
+              "label": "Em termos simples",
+              "text": "Os estudantes leem quatro textos da segunda geração romântica e decidem, com base em versos, se a dor ultrarromântica é sincera ou convenção literária."
+            },
+            {
+              "type": "labeled",
+              "label": "Aula 1",
+              "text": "Abertura 8 min → Contexto 7 → Leitura atenta A e B 22 → Discussão 13 (50 min)"
+            },
+            {
+              "type": "labeled",
+              "label": "Aula 2",
+              "text": "Retomada 4 min → Leitura atenta C e D 15 → Seminário 12 → Linguagem e estilo 5 → Escrita 10 → Para fechar 4 (50 min)"
+            },
+            {
+              "type": "labeled",
+              "label": "Textos-base",
+              "text": "Álvares de Azevedo: “Se eu morresse amanhã”, prefácio da 2ª parte da Lira dos Vinte Anos e “É ela! É ela! É ela! É ela!”. Casimiro de Abreu: “Meus oito anos”. Todos em domínio público, impressos na Coletânea de textos."
+            }
+          ]
+        },
+        {
+          "heading": "Objetivos de aprendizagem",
+          "blocks": [
+            {
+              "type": "labeled",
+              "label": "Grande ideia",
+              "text": "O Ultrarromantismo transforma a dor em linguagem, e o mesmo poeta que a leva a sério também sabe rir dela."
+            },
+            {
+              "type": "list",
+              "label": "Ao final das duas aulas, os estudantes serão capazes de",
+              "items": [
+                "Situar a segunda geração romântica no Brasil Império, por volta de 1850",
+                "Reconhecer mal do século, evasão e idealização em versos específicos",
+                "Explicar o efeito de sentido de exclamações, reticências e metáforas",
+                "Identificar a ironia romântica (binomia) em Álvares de Azevedo",
+                "Defender uma posição em parágrafo argumentativo com evidência e contra-argumento"
+              ]
+            },
+            {
+              "type": "labeled",
+              "label": "Conhecimentos prévios",
+              "text": "Características gerais do Romantismo e da primeira geração (nacionalismo, indianismo). Noção de eu lírico e de figuras de linguagem básicas."
+            }
+          ]
+        },
+        {
+          "heading": "Habilidades da BNCC",
+          "blocks": [
+            {
+              "type": "table",
+              "headers": [
+                "Código",
+                "Em resumo",
+                "Onde aparece"
+              ],
+              "rows": [
+                [
+                  "EM13LP52 (principal)",
+                  "Analisar obras com ferramentas da crítica literária e contexto de produção",
+                  "Leitura atenta e organizador, nas duas aulas"
+                ],
+                [
+                  "EM13LP48",
+                  "Assimilações, rupturas e permanências na literatura brasileira",
+                  "Contexto: primeira geração versus segunda geração"
+                ],
+                [
+                  "EM13LP49",
+                  "Peculiaridades dos gêneros literários; o eu lírico no poema",
+                  "Questões 1 e 2; separar eu lírico e autor"
+                ],
+                [
+                  "EM13LP50",
+                  "Relações intertextuais e interdiscursivas entre obras",
+                  "Seminário: Textos A e D, ligados pelo prefácio C"
+                ],
+                [
+                  "EM13LP06",
+                  "Efeitos de sentido de usos expressivos da linguagem",
+                  "Linguagem e estilo: exclamação e anticlímax"
+                ]
+              ]
+            },
+            {
+              "type": "labeled",
+              "label": "Competências",
+              "text": "Competência geral 3 (repertório cultural). Competência específica 6 de Linguagens e suas Tecnologias (apreciação estética de produções artísticas e culturais)."
+            }
+          ]
+        },
+        {
+          "heading": "Conteúdos",
+          "blocks": [
+            {
+              "type": "list",
+              "label": "Conceituais",
+              "items": [
+                "Contexto: Faculdade de Direito de São Paulo, boemia estudantil, influência de Byron e Musset",
+                "Mal do século, evasão, idealização da mulher e da infância",
+                "Binomia: as duas faces da Lira dos Vinte Anos",
+                "Álvares de Azevedo e Casimiro de Abreu; Junqueira Freire e Fagundes Varela citados no contexto"
+              ]
+            },
+            {
+              "type": "list",
+              "label": "Procedimentais",
+              "items": [
+                "Leitura em voz alta e anotação com chave",
+                "Registro de evidência em organizador",
+                "Discussão com base em versos",
+                "Parágrafo argumentativo com contra-argumento"
+              ]
+            },
+            {
+              "type": "list",
+              "label": "Atitudinais",
+              "items": [
+                "Distinguir convenção estética de sofrimento real",
+                "Ouvir e responder ao argumento do colega com base no texto"
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Metodologia",
+          "blocks": [
+            {
+              "type": "list",
+              "items": [
+                "**Pergunta discutível como fio condutor.** Escrita individual na abertura, retomada no fechamento.",
+                "**Leitura atenta em duas leituras.** Primeira para o sentido geral; segunda com chave de anotação.",
+                "**Escrever antes de falar.** Pensar, escrever, conversar em dupla, compartilhar.",
+                "**Seminário socrático.** Estudantes falam entre si citando versos; o professor provoca, não conduz.",
+                "**Texto completo, sem pré-explicação.** O contexto é breve e não interpreta os poemas pela turma."
+              ]
+            },
+            {
+              "type": "callout",
+              "kind": "teacher-note",
+              "label": "Cuidado com o tema",
+              "text": "Os poemas tratam a morte como alívio. Diferencie convenção literária de sofrimento real. Se algum estudante demonstrar sofrimento, acolha em particular e acione a orientação escolar; o CVV atende pelo 188."
+            }
+          ]
+        },
+        {
+          "heading": "Vocabulário e dificuldades previstas",
+          "blocks": [
+            {
+              "type": "h3",
+              "text": "Termos-chave"
+            },
+            {
+              "type": "from_shared",
+              "key": "vocabulario"
+            },
+            {
+              "type": "h3",
+              "text": "Dificuldades previstas"
+            },
+            {
+              "type": "from_shared",
+              "key": "dificuldades"
+            }
+          ]
+        },
+        {
+          "heading": "Desenvolvimento — Aula 1",
+          "blocks": [
+            {
+              "type": "phase_header",
+              "name": "Abertura: a pergunta",
+              "minutes": 8
+            },
+            {
+              "type": "from_shared",
+              "key": "anchor_task"
+            },
+            {
+              "type": "phase_header",
+              "name": "Contexto em sete minutos",
+              "minutes": 7
+            },
+            {
+              "type": "list",
+              "items": [
+                "Primeira geração: o olhar para fora (nação, indígena, natureza). Segunda geração: o olhar para dentro.",
+                "Cenário: São Paulo provinciana, estudantes de Direito longe de casa, leitura de Byron e Musset.",
+                "Autores: Álvares de Azevedo (morre aos 20 anos), Casimiro de Abreu, Junqueira Freire, Fagundes Varela.",
+                "Distribua a Coletânea de textos e o Material do aluno ao fim desta fase."
+              ]
+            },
+            {
+              "type": "callout",
+              "kind": "teacher-note",
+              "label": "Não antecipe",
+              "text": "Não liste as características do movimento nem interprete os poemas. Elas devem sair da leitura da turma."
+            },
+            {
+              "type": "phase_header",
+              "name": "Leitura atenta: Textos A e B",
+              "minutes": 22
+            },
+            {
+              "type": "list",
+              "ordered": true,
+              "items": [
+                "Leia o Texto A em voz alta. Pergunte só: qual é o assunto? (3 min)",
+                "Apresente a chave de anotação. Estudantes releem A sozinhos e anotam. (5 min)",
+                "Um estudante lê o Texto B em voz alta; segunda leitura individual com a chave. (6 min)",
+                "Duplas comparam anotações e preenchem as linhas A e B do organizador. (8 min)"
+              ]
+            },
+            {
+              "type": "from_shared",
+              "key": "chave_anotacao"
+            },
+            {
+              "type": "h3",
+              "text": "Enquanto circula"
+            },
+            {
+              "type": "from_shared",
+              "key": "observar"
+            },
+            {
+              "type": "phase_header",
+              "name": "Discussão: pensar, escrever, conversar",
+              "minutes": 13
+            },
+            {
+              "type": "paragraph",
+              "text": "Cada estudante escreve a resposta das questões 1 e 2 antes de falar (5 min). Depois, troca em dupla (3 min) e a turma compartilha (5 min)."
+            },
+            {
+              "type": "from_shared",
+              "key": "q1",
+              "label": "1"
+            },
+            {
+              "type": "from_shared",
+              "key": "q2",
+              "label": "2"
+            },
+            {
+              "type": "list",
+              "label": "Perguntas para a turma",
+              "items": [
+                "No Texto A, por que a mãe e a irmã aparecem antes da glória?",
+                "A natureza em A é bela (“Que sol! que céu azul!”). Por que isso não afasta o desejo de morrer?",
+                "Os dois poemas fogem do presente. Para onde foge cada um?"
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Desenvolvimento — Aula 2",
+          "blocks": [
+            {
+              "type": "phase_header",
+              "name": "Retomada",
+              "minutes": 4
+            },
+            {
+              "type": "paragraph",
+              "text": "Peça a duas duplas que leiam as linhas A e B do organizador. Escreva no quadro as palavras que surgirem: mal do século, evasão, idealização."
+            },
+            {
+              "type": "phase_header",
+              "name": "Leitura atenta: Textos C e D",
+              "minutes": 15
+            },
+            {
+              "type": "list",
+              "ordered": true,
+              "items": [
+                "Leia o Texto C em voz alta. Pergunte: o que o autor avisa ao leitor? (3 min)",
+                "Leia o Texto D em voz alta, com tom sério até a última estrofe. Deixe a turma reagir. (3 min)",
+                "Releitura em duplas com a chave; preencham as linhas C e D do organizador. (9 min)"
+              ]
+            },
+            {
+              "type": "phase_header",
+              "name": "Seminário socrático",
+              "minutes": 12
+            },
+            {
+              "type": "paragraph",
+              "text": "Cada estudante escreve a resposta da questão 3 (2 min). Depois, a turma em roda discute; cada fala cita um verso pelo texto e pela estrofe."
+            },
+            {
+              "type": "from_shared",
+              "key": "q3",
+              "label": "3"
+            },
+            {
+              "type": "list",
+              "label": "Perguntas para o seminário",
+              "items": [
+                "Em que verso do Texto D você percebeu que o poema não era sério?",
+                "A primeira estrofe de A e a última de D são do mesmo autor. Como o Texto C explica isso?",
+                "A ironia de D apaga a sinceridade de A, ou mostra que o poeta sabia usar uma convenção?"
+              ]
+            },
+            {
+              "type": "callout",
+              "kind": "teacher-note",
+              "label": "Não resolva",
+              "text": "Não dê a resposta da pergunta de abertura. As duas posições precisam chegar vivas à escrita."
+            },
+            {
+              "type": "phase_header",
+              "name": "Linguagem e estilo: a mesma exclamação",
+              "minutes": 5
+            },
+            {
+              "type": "paragraph",
+              "text": "Coloque lado a lado “Se eu morresse amanhã!” (A) e “Oh! meu Deus! era um rol de roupa suja!” (D). Pergunte: o mesmo sinal produz o mesmo efeito? Nomeie o recurso de D: anticlímax, a queda do elevado para o banal."
+            },
+            {
+              "type": "phase_header",
+              "name": "Escrita: parágrafo argumentativo",
+              "minutes": 10
+            },
+            {
+              "type": "from_shared",
+              "key": "q4",
+              "label": "4"
+            },
+            {
+              "type": "phase_header",
+              "name": "Para fechar",
+              "minutes": 4
+            },
+            {
+              "type": "from_shared",
+              "key": "verificacao_final"
+            },
+            {
+              "type": "h3",
+              "text": "Como classificar as respostas"
+            },
+            {
+              "type": "from_shared",
+              "key": "classificacao"
+            }
+          ]
+        },
+        {
+          "heading": "Recursos didáticos",
+          "blocks": [
+            {
+              "type": "list",
+              "items": [
+                "Coletânea de textos, 4 textos (A, B, C, D) — 1 por estudante, incluída neste pacote",
+                "Material do aluno com chave de anotação, organizador e questões — 1 por estudante, incluído",
+                "Quadro e pincel, para a pergunta de abertura, o contexto e as palavras da retomada",
+                "Projetor (opcional), para mostrar a pergunta de abertura e os dois versos de Linguagem e estilo",
+                "Guia de observação do professor, incluído"
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Avaliação",
+          "blocks": [
+            {
+              "type": "list",
+              "label": "Formativa, durante as aulas",
+              "items": [
+                "Organizador preenchido: verso exato e efeito de sentido",
+                "Respostas escritas das questões 1 a 3 e participação no seminário",
+                "Para fechar: comparação com a resposta de abertura"
+              ]
+            },
+            {
+              "type": "h3",
+              "text": "Critérios do parágrafo argumentativo (questão 4)"
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Critério",
+                "Atingiu",
+                "Em desenvolvimento"
+              ],
+              "rows": [
+                [
+                  "Posição",
+                  "Responde à pergunta com tese clara",
+                  "Resume os poemas sem tomar posição"
+                ],
+                [
+                  "Evidência",
+                  "Cita versos de dois textos, um de cada aula",
+                  "Cita um texto só ou não cita verso"
+                ],
+                [
+                  "Análise",
+                  "Explica o efeito de sentido do verso citado",
+                  "Apenas identifica o recurso"
+                ],
+                [
+                  "Contra-argumento",
+                  "Apresenta e responde a uma posição contrária",
+                  "Ignora a posição contrária"
+                ],
+                [
+                  "Contexto",
+                  "Relaciona o texto ao mal do século ou à binomia",
+                  "Não relaciona com o movimento"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Se você adaptar esta aula",
+          "blocks": [
+            {
+              "type": "labeled",
+              "label": "A pergunta de abertura e o fechamento",
+              "text": "São a mesma pergunta. É a comparação entre as duas respostas que mostra a aprendizagem."
+            },
+            {
+              "type": "labeled",
+              "label": "O Texto D depois do Texto A",
+              "text": "A ironia só funciona contra o fundo sério. Inverter a ordem tira a surpresa que motiva o seminário."
+            },
+            {
+              "type": "labeled",
+              "label": "Os poemas completos, sem pré-explicação",
+              "text": "No Ensino Médio, a complexidade do texto é o objeto. Explicar antes tira dos estudantes a análise."
+            }
+          ]
+        },
+        {
+          "heading": "Nota sobre as fontes",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Elaborado sem o Learning Commons Knowledge Graph, que não cobre a BNCC. Habilidades e dificuldades previstas refletem boas práticas gerais. Confira a redação das habilidades e dos poemas nas edições oficiais (BNCC/MEC e Domínio Público) antes de imprimir."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "source_packet",
+      "audience": "student",
+      "eyebrow": "2ª série do Ensino Médio · Literatura Brasileira",
+      "title": "Coletânea de textos: Ultrarromantismo",
+      "sections": [
+        {
+          "heading": "Aula 1",
+          "blocks": [
+            {
+              "type": "from_shared",
+              "key": "texto_a"
+            },
+            {
+              "type": "from_shared",
+              "key": "texto_b"
+            },
+            {
+              "type": "page_break"
+            }
+          ]
+        },
+        {
+          "heading": "Aula 2",
+          "blocks": [
+            {
+              "type": "from_shared",
+              "key": "texto_c"
+            },
+            {
+              "type": "from_shared",
+              "key": "texto_d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "student_materials",
+      "audience": "student",
+      "eyebrow": "2ª série do Ensino Médio · Literatura Brasileira · Material do aluno",
+      "title": "Ultrarromantismo: dor sincera ou pose literária?",
+      "meta": "Nome: ______________________________   Turma: ________   Data: ___________",
+      "sections": [
+        {
+          "heading": "Antes de ler",
+          "blocks": [
+            {
+              "type": "group",
+              "blocks": [
+                {
+                  "type": "from_shared",
+                  "key": "anchor_task"
+                },
+                {
+                  "type": "answer_box",
+                  "ruled": true,
+                  "height_pt": 100
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Como anotar",
+          "blocks": [
+            {
+              "type": "from_shared",
+              "key": "chave_anotacao"
+            }
+          ]
+        },
+        {
+          "heading": "Organizador de evidências",
+          "blocks": [
+            {
+              "type": "group",
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "text": "Aula 1: preencha as linhas A e B. Aula 2: preencha as linhas C e D."
+                },
+                {
+                  "type": "from_shared",
+                  "key": "organizador"
+                }
+              ]
+            },
+            {
+              "type": "page_break"
+            }
+          ]
+        },
+        {
+          "heading": "Ler e responder",
+          "blocks": [
+            {
+              "type": "group",
+              "blocks": [
+                {
+                  "type": "from_shared",
+                  "key": "q1",
+                  "label": "1"
+                },
+                {
+                  "type": "paragraph",
+                  "text": "A virada acontece no verso “______________________”, e isso mostra que o eu lírico ______________________."
+                },
+                {
+                  "type": "answer_box",
+                  "ruled": true,
+                  "height_pt": 80
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "blocks": [
+                {
+                  "type": "from_shared",
+                  "key": "q2",
+                  "label": "2"
+                },
+                {
+                  "type": "answer_box",
+                  "ruled": true,
+                  "height_pt": 100
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "blocks": [
+                {
+                  "type": "from_shared",
+                  "key": "q3",
+                  "label": "3"
+                },
+                {
+                  "type": "answer_box",
+                  "ruled": true,
+                  "height_pt": 100
+                }
+              ]
+            },
+            {
+              "type": "page_break"
+            }
+          ]
+        },
+        {
+          "heading": "Escrever",
+          "blocks": [
+            {
+              "type": "group",
+              "blocks": [
+                {
+                  "type": "from_shared",
+                  "key": "q4",
+                  "label": "4"
+                },
+                {
+                  "type": "paragraph",
+                  "text": "Para o contra-argumento: Alguém poderia dizer que ______________________; no entanto, ______________________."
+                },
+                {
+                  "type": "answer_box",
+                  "ruled": true,
+                  "height_pt": 230
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Para fechar",
+          "blocks": [
+            {
+              "type": "group",
+              "blocks": [
+                {
+                  "type": "from_shared",
+                  "key": "verificacao_final"
+                },
+                {
+                  "type": "answer_box",
+                  "ruled": true,
+                  "height_pt": 80
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "observation_template",
+      "audience": "teacher",
+      "eyebrow": "2ª série do Ensino Médio · Literatura Brasileira · Guia de observação",
+      "title": "Ultrarromantismo: guia de observação",
+      "sections": [
+        {
+          "heading": "Como usar",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Circule durante as duas leituras atentas e o seminário. Anote o que cada estudante faz e escolha quem vai falar primeiro. Depois da Aula 2, separe as respostas de Para fechar nos três grupos abaixo."
+            }
+          ]
+        },
+        {
+          "heading": "O que observar",
+          "blocks": [
+            {
+              "type": "from_shared",
+              "key": "observar"
+            },
+            {
+              "type": "fill_table",
+              "headers": [
+                "Estudante",
+                "O que fez (verso citado, efeito, eu lírico)",
+                "Próximo passo"
+              ],
+              "blank_rows": 6,
+              "row_height_pt": 60
+            }
+          ]
+        },
+        {
+          "heading": "Dificuldades previstas",
+          "blocks": [
+            {
+              "type": "from_shared",
+              "key": "dificuldades"
+            }
+          ]
+        },
+        {
+          "heading": "Classificação de Para fechar",
+          "blocks": [
+            {
+              "type": "from_shared",
+              "key": "verificacao_final"
+            },
+            {
+              "type": "from_shared",
+              "key": "classificacao"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
