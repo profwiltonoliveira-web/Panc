@@ -226,3 +226,38 @@ test('polycardToItem: catálogo recebe wid; sem preço ou link externo é descar
   assert.equal(RML.polycardToItem({ metadata: { url: 'produto.mercadolivre.com.br/MLB-1234567' }, components: [{ type: 'title', title: { text: 'X' } }] }), null);
   assert.equal(RML.polycardToItem({ metadata: { url: 'evil.com/MLB-1234567' }, components: [{ type: 'title', title: { text: 'X' } }, { type: 'price', price: { current_price: { value: 1 } } }] }), null);
 });
+
+// ---------- v0.3.1: problemas encontrados na busca real "Samsung Galaxy S25 256GB" ----------
+// Títulos ILUSTRATIVOS no estilo do ML (não são os anúncios reais da busca do usuário).
+const S25 = 'Samsung Galaxy S25 256GB';
+test('RAM não divide o mesmo modelo em grupos (causa do grupo "12gb ultra")', () => {
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25 5G 256GB 12GB RAM Azul').group, 'padrão');
+  assert.equal(matchProduct(S25, 'Celular Samsung Galaxy S25, 256gb, 12gb De Ram').group, 'padrão');
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25 256gb Navy').group, 'padrão');
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25 Ultra 256GB 12GB RAM').group, 'ultra');
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25 Ultra 256 Gb Preto').group, 'ultra');
+  assert.equal(matchProduct('iphone 13', 'Apple iPhone 13 (128 GB) - Rosa').group, '128gb'); // armazenamento continua contando
+});
+
+test('S25+, Plus, Edge e FE não se misturam com o S25', () => {
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25+ 256GB 12GB RAM').group, 'plus');
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25 Plus 256gb').group, 'plus');
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25 Edge 256GB 12GB').group, 'edge');
+  assert.equal(matchProduct(S25, 'Samsung Galaxy S25 FE 256GB 8GB RAM').group, 'fe');
+  assert.equal(matchProduct('galaxy s25 plus 256gb', 'Samsung Galaxy S25+ 256GB').group, 'padrão'); // "S25+" casa com "plus" da busca
+});
+
+test('grupo principal = o que corresponde à busca, mesmo menor que o de uma variante', () => {
+  const t = (title, price) => item(title, price, { title });
+  const items = [
+    t('Samsung Galaxy S25 256GB 12GB RAM Azul', 3898), t('Samsung Galaxy S25 256gb Navy', 4100), t('Samsung Galaxy S25 5G 256GB Gelo', 4200),
+    ...[5000, 5100, 5200, 5300, 5400, 5500].map((p, i) => t(`Samsung Galaxy S25 Ultra 256GB Cor${i}`, p))
+  ];
+  const r = analyze(items, {}, NOW, S25);
+  assert.equal(r.stats.mainGroup, 'padrão');
+  assert.equal(r.stats.refMin, 3898); // antes: 5000 (mínimo do Ultra)
+  assert.equal(r.stats.median, 4100);
+  assert.equal(r.stats.max, 4200); // extremos só do grupo equivalente
+  assert.equal(r.groups.find((g) => g.group === 'ultra').count, 6);
+  assert.equal(r.items.find((i) => i.price === 3898).isCheapest, true);
+});

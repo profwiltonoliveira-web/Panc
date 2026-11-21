@@ -124,14 +124,34 @@ function button(text, onClick) {
 
 async function copyDiagnostic(diags, btn) {
   const text = JSON.stringify({ radarDeOfertas: chrome.runtime.getManifest().version, quando: new Date().toISOString(), diagnosticos: diags }, null, 2);
+  return copyText(text, btn, 'Diagnóstico copiado ✓');
+}
+
+function searchDataJson() {
+  const a = current.analysis;
+  return JSON.stringify({
+    radarDeOfertas: chrome.runtime.getManifest().version,
+    quando: new Date().toISOString(),
+    busca: current.query,
+    fonte: current.source,
+    grupoPrincipal: a.stats.mainGroup,
+    grupos: a.groups,
+    anuncios: a.items.map((i) => ({
+      titulo: i.title, preco: i.price, precoDe: i.originalPrice, frete: i.shipping, total: i.total,
+      equivalente: i.equivalent, grupo: i.group, motivo: i.matchWhy, classificacao: i.label, link: i.link
+    }))
+  }, null, 2);
+}
+
+async function copyText(text, btn, okText) {
   try {
     await navigator.clipboard.writeText(text);
-    btn.textContent = 'Diagnóstico copiado ✓';
+    btn.textContent = okText;
   } catch {
     // Sem permissão de área de transferência: mostra o texto para copiar manualmente.
     const ta = document.createElement('textarea');
     ta.className = 'diag'; ta.readOnly = true; ta.value = text;
-    $('#status').append(ta);
+    btn.parentElement.append(ta);
     ta.select();
   }
 }
@@ -192,10 +212,16 @@ function renderSummary() {
   const src = document.createElement('div');
   src.className = 'src';
   const money = (n) => (n == null ? '—' : 'R$ ' + fmt(n));
-  const groupTxt = stats.mainGroup && stats.mainGroup !== 'padrão' ? ` (variante: ${stats.mainGroup})` : '';
-  src.textContent = `Fonte: ${current.source} · ${stats.count} anúncios, ${stats.equivalentCount} equivalentes à busca · valores do maior grupo de equivalentes${groupTxt}: ${stats.mainGroupCount} anúncios` +
+  const exact = stats.mainGroup === 'padrão';
+  const groupTxt = exact ? 'grupo que corresponde exatamente à busca' : `maior grupo de equivalentes (variante: ${stats.mainGroup}) — nenhum anúncio corresponde exatamente à busca`;
+  const others = current.analysis.groups.filter((g) => g.group !== stats.mainGroup)
+    .map((g) => `${g.group === 'padrão' ? 'sem variante' : g.group} ${g.count} (a partir de ${money(g.refMin)})`);
+  src.textContent = `Fonte: ${current.source} · ${stats.count} anúncios, ${stats.equivalentCount} equivalentes à busca · valores acima: ${groupTxt}, ${stats.mainGroupCount} anúncios` +
     (stats.spreadPct != null ? ` · diferença mais barato → mais caro: ${stats.spreadPct.toFixed(0)}%` : '') +
-    ` · frete conhecido em ${stats.shippingKnownCount}.`;
+    (others.length ? ` · outros grupos (não misturados): ${others.join('; ')}` : '') +
+    ` · frete conhecido em ${stats.shippingKnownCount}. `;
+  // Exporta os anúncios lidos (dados públicos dos anúncios) para conferência com a página do ML.
+  src.append(button('Copiar dados da busca', (ev) => copyText(searchDataJson(), ev.target, 'Dados copiados ✓')));
   box.replaceChildren(
     cell(money(stats.refMin), 'Menor total'),
     cell(money(stats.median), 'Mediana'),

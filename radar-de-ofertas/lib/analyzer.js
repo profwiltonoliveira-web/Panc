@@ -25,10 +25,12 @@ const ACCESSORY = new Set(['capa', 'capinha', 'case', 'pelicula', 'suporte', 'ca
 // Indicam produto genérico/compatível em qualquer posição.
 const NOT_GENUINE = new Set(['compativel', 'replica', 'similar', 'paralelo']);
 // Variantes que mudam o produto (comparadas pela presença no título).
-const VARIANT = new Set(['pro', 'max', 'plus', 'mini', 'ultra', 'lite', 'fe', 'slim', 'air', 'xl', 'xr', 'xs', 'promax']);
+// "plus" também cobre "S25+" (o "+" é convertido em " plus" na tokenização).
+const VARIANT = new Set(['pro', 'max', 'plus', 'mini', 'ultra', 'lite', 'fe', 'slim', 'air', 'xl', 'xr', 'xs', 'promax', 'edge', 'neo']);
 
 export function tokens(s) {
-  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/([a-z0-9])\s*\+(?=\s|$|[^a-z0-9])/g, '$1 plus ') // "S25+" → "s25 plus"
     .replace(/(\d)\s+(gb|tb|mb|mah|w|pol|polegadas|ml|l|kg|g)\b/g, '$1$2')
     .split(/[^a-z0-9]+/).filter(Boolean);
 }
@@ -59,12 +61,36 @@ export function matchProduct(query, title, condition) {
   const ng = tt.find((t) => NOT_GENUINE.has(t) && !qset.has(t));
   if (ng) return { equivalent: false, group: null, why: `Título indica produto "${ng}", não o original buscado.` };
 
-  // Chave do grupo: variantes e capacidades presentes no título mas não fixadas pela busca, + condição.
+  // Chave do grupo: variantes e ARMAZENAMENTO presentes no título mas não fixados pela busca, + condição.
+  // Memória RAM ("12GB RAM", "12gb de ram") não entra: o mesmo modelo é anunciado com e sem
+  // a RAM no título, e incluí-la dividia o mesmo produto em grupos diferentes.
   const variant = tt.filter((t) => VARIANT.has(t) && !qset.has(t));
-  const capacity = tt.filter((t) => /^\d+(gb|tb)$/.test(t) && !qset.has(t));
+  const ram = ramTokens(tt);
+  const capacity = tt.filter((t, i) => /^\d+(gb|tb)$/.test(t) && !qset.has(t) && !ram.has(i));
   const parts = [...new Set([...variant, ...capacity])].sort();
   if (condition === 'usado' || condition === 'recondicionado') parts.push(condition);
   return { equivalent: true, group: parts.join(' ') || 'padrão', why: null };
+}
+
+const capGB = (t) => { const m = t.match(/^(\d+)(gb|tb)$/); return m ? Number(m[1]) * (m[2] === 'tb' ? 1024 : 1) : null; };
+
+/**
+ * Índices dos tokens de capacidade que são memória RAM:
+ *  - junto da palavra "ram" ("12gb ram", "12gb de ram", "ram 12gb", "ram de 12gb");
+ *  - ou, quando o título também traz um armazenamento ≥ 64 GB, as capacidades ≤ 32 GB.
+ */
+export function ramTokens(tt) {
+  const ram = new Set();
+  const caps = [];
+  tt.forEach((t, i) => {
+    const gb = capGB(t);
+    if (gb == null) return;
+    caps.push([i, gb]);
+    const near = [tt[i + 1], tt[i + 1] === 'de' ? tt[i + 2] : null, tt[i - 1], tt[i - 1] === 'de' ? tt[i - 2] : null];
+    if (near.includes('ram')) ram.add(i);
+  });
+  if (caps.some(([, gb]) => gb >= 64)) for (const [i, gb] of caps) if (gb <= 32) ram.add(i);
+  return ram;
 }
 
 export function median(nums) {
@@ -132,12 +158,15 @@ export function analyze(items, history = {}, now = Date.now(), query = '') {
 
   enriched.sort((a, b) => (b.equivalent - a.equivalent) || a.total - b.total);
 
-  // Grupo principal = maior grupo de equivalentes (usado no resumo)
-  const main = [...gstats.values()].sort((a, b) => b.count - a.count)[0] || null;
+  // Grupo principal (usado no resumo): o que corresponde EXATAMENTE à busca ("padrão", sem
+  // variante extra), se existir; senão o maior. Antes era sempre o maior, e uma variante
+  // (ex.: Ultra) podia virar a referência de uma busca pelo modelo base.
+  const all = [...gstats.values()].sort((a, b) => b.count - a.count);
+  const main = gstats.get('padrão') || all[0] || null;
   const eqCount = enriched.filter((i) => i.equivalent).length;
   return {
     items: enriched,
-    groups: [...gstats.values()],
+    groups: all,
     stats: {
       count: items.length,
       equivalentCount: eqCount,
