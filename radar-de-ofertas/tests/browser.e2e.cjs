@@ -211,12 +211,14 @@ const HTML_OK = `<html><body><ol class="ui-search-layout">${RESULTS}</ol></body>
     const t = await page.$eval('#status', (e) => e.innerText);
     assert.match(t, /API: HTTP 403/);
     assert.match(t, /verificação de segurança/);
+    assert.match(t, /Ir para a aba do ML/); // a aba fica aberta para o usuário concluir a verificação
     assert.equal(await page.$$eval('.card', (c) => c.length), 0);
   });
   mode = 'layout';
   await check('layout desconhecido → erro explicando, sem resultados inventados', async () => {
     await page.click('#searchBtn');
-    await page.waitForFunction(() => /layout/.test(document.querySelector('#status').innerText));
+    await page.waitForFunction(() => /Copiar diagnóstico/.test(document.querySelector('#status').innerText), null, { timeout: 45000 });
+    assert.match(await page.$eval('#status', (e) => e.innerText), /nenhum anúncio foi reconhecido/);
     assert.equal(await page.$$eval('.card', (c) => c.length), 0);
   });
   await check('apagar histórico', async () => {

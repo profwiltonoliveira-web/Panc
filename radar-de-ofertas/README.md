@@ -1,4 +1,4 @@
-# Radar de Ofertas — extensão Chrome (MVP v0.2.0)
+# Radar de Ofertas — extensão Chrome (MVP v0.3.0)
 
 Busca produtos no Mercado Livre, compara preços entre anúncios **equivalentes** (incluindo o frete, quando informado), classifica as ofertas e guarda um histórico local de preços.
 Sem backend e sem serviços pagos: tudo roda no navegador, e os dados ficam em `chrome.storage.local`.
@@ -39,16 +39,38 @@ Sem backend e sem serviços pagos: tudo roda no navegador, e os dados ficam em `
 
 ## 4. Como os resultados são obtidos
 
-1. **API pública oficial** `api.mercadolibre.com/sites/MLB/search`. Teste real em 20/11/2026: responde **HTTP 403 "forbidden"** sem autenticação. A chamada é mantida porque não custa nada e volta a funcionar se o ML reabrir o acesso.
-2. **Página pública de busca** `lista.mercadolivre.com.br/<termo>`: o HTML é lido com `DOMParser` (sem executar scripts) e os cards são extraídos.
-3. Se as duas falharem, a extensão mostra o erro de cada fonte. **Nenhum resultado é inventado.**
+A extensão tenta, nesta ordem:
 
-Mensagens de erro comuns:
+1. **API pública oficial** (`api.mercadolibre.com/sites/MLB/search`). Hoje responde **HTTP 403** sem autenticação; a chamada é mantida porque é gratuita e volta a funcionar se o acesso for reaberto.
+2. **Leitura direta** da página `lista.mercadolivre.com.br/<termo>` por requisição.
+3. **Aba do navegador** (automático, se 1 e 2 não trouxerem anúncios): a extensão abre a página de resultados **em segundo plano no seu Chrome**, espera ela carregar e lê os anúncios do DOM. Se a leitura der certo, fecha a aba.
+   - Se o Mercado Livre pedir **verificação de segurança, login ou bloquear** a página, **nada é contornado**: a aba fica aberta e aparece o botão **Ir para a aba do ML**. Resolva lá e clique em **Ler aba do ML**.
+4. **Ler aba do ML** (manual): lê a página de resultados do ML que você abriu e pesquisou normalmente no site. O termo pesquisado na página é usado na análise.
+
+Para ler os anúncios, a extensão tenta três estratégias, e a usada aparece no resumo como "estratégia …":
+
+| Estratégia | O que lê |
+|---|---|
+| `json` | Dados dos cards ("polycard") que a página traz embutidos em `<script>`. É a mais resistente a mudanças visuais. |
+| `dom` | Cards renderizados (`li.ui-search-layout__item`, `.poly-card`). |
+| `links` | Varredura genérica: links de anúncio (`/MLB-…`, `/p/MLB…`) com preço no mesmo bloco. |
+
+**Nenhum resultado é inventado.** Se nada funcionar, a extensão mostra o motivo de cada etapa e o botão **Copiar diagnóstico**.
+
+### Diagnóstico
+O botão **Copiar diagnóstico** copia um JSON **estrutural**, sem textos da página e sem dados pessoais. Ele contém:
+- versão, origem (leitura direta ou aba), URL, status HTTP, título da página e tamanho do HTML;
+- **tipo de página**: `resultados`, `verificacao`, `bloqueio`, `login`, `sem-resultados`, `pagina-de-produto` ou `desconhecida`;
+- quantos anúncios cada estratégia leu e contagens de elementos (cards, preços, links de anúncio, scripts com "polycard");
+- as classes CSS mais frequentes da busca (`ui-search…`, `poly…`), para ajustar os seletores.
+
+Cole esse JSON numa mensagem para o desenvolvedor quando a coleta falhar.
 
 | Mensagem | O que fazer |
 |---|---|
-| `verificação de segurança` / `HTTP 403` | Abra mercadolivre.com.br numa aba, conclua a verificação e tente de novo. Redes de empresa, VPN e servidores podem ser bloqueados. |
-| `nenhum anúncio foi reconhecido (o layout do site pode ter mudado)` | O ML mudou o HTML. Os seletores em `lib/mercadolivre.js` (`parseCard`) precisam de ajuste. |
+| `verificação de segurança` | Clique em **Ir para a aba do ML**, conclua a verificação e clique em **Ler aba do ML**. |
+| `bloqueou o acesso ("Hubo un error…")` | Desative VPN ou proxy se houver, abra mercadolivre.com.br normalmente, pesquise no site e clique em **Ler aba do ML**. |
+| `nenhum anúncio foi reconhecido` | Clique em **Copiar diagnóstico** e envie: os seletores precisam de ajuste. |
 | `o histórico não pôde ser salvo` | Os resultados continuam visíveis. Exporte e apague o histórico. |
 
 ## 5. Comparação de preços
@@ -87,30 +109,33 @@ Observações:
 |---|---|
 | `storage` | Histórico, pesquisas e itens acompanhados. |
 | `contextMenus` | Item "Buscar no Radar de Ofertas" no botão direito. |
-| `host_permissions`: `api.mercadolibre.com`, `lista.mercadolivre.com.br`, `www.mercadolivre.com.br` | Buscar resultados (API, página de busca e seu redirecionamento). |
+| `scripting` | Injetar o leitor (`lib/ml-parser.js`, só leitura) **apenas** nas abas `lista.mercadolivre.com.br` e `www.mercadolivre.com.br`, quando a busca precisa da aba ou você clica em **Ler aba do ML**. |
+| `host_permissions`: `api.mercadolibre.com`, `lista.mercadolivre.com.br`, `www.mercadolivre.com.br` | Buscar resultados e, nessas abas, ler a URL e injetar o leitor. |
 
-Não usa `tabs`, `scripting`, `<all_urls>` nem content scripts. A CSP só permite scripts da própria extensão e imagens de `*.mlstatic.com`.
+Não usa `tabs`, `<all_urls>`, `webRequest` nem content scripts permanentes: o leitor só é injetado sob demanda nas páginas do ML. A CSP só permite scripts da própria extensão e imagens de `*.mlstatic.com`.
 
 ## 9. Testes
 
 ```bash
 cd radar-de-ofertas
-npm test            # 21 testes unitários (Node ≥ 18): classificação, equivalência, IDs, links, poda
-npm run test:e2e    # 21 verificações com a extensão carregada no Chromium (requer Playwright)
+npm test               # 24 testes unitários (Node ≥ 18)
+npm run test:e2e       # 21 cenários com a extensão no Chromium (Playwright)
+npm run test:e2e:tab   # 7 cenários da coleta v0.3: JSON embutido, aba em 2º plano, "Ler aba do ML", verificação, diagnóstico
 ```
 
-`test:e2e` usa **rede simulada** (HTML sintético no formato dos cards do ML). Ele valida a lógica e a interface, mas **não substitui** o teste com o site real, que precisa ser feito manualmente:
+Os testes e2e usam **rede simulada com HTML sintético**. `test:e2e:tab` sobe um servidor HTTPS local e aponta os domínios do ML para ele via `--host-resolver-rules`. Eles validam a lógica, mas **não substituem** o teste com o site real.
 
-### Checklist de teste real (no seu navegador)
-1. Busque `iphone 13 128gb`. Devem aparecer anúncios com foto, preço e frete.
-2. Abra 3 resultados e confira se o título e o preço da página do anúncio batem com o card.
-3. Confira se capas e películas aparecem tracejadas como "Produto diferente da busca?".
-4. Marque ★ em um item e veja se ele aparece em **Acompanhando**.
-5. No dia seguinte, repita a busca e confira a aba **Histórico** (2 pontos no mini-gráfico).
-6. Se algo falhar, anote a mensagem de erro exibida e o termo buscado.
+### Checklist de teste real (no seu Chrome)
+1. Atualize a extensão: em `chrome://extensions`, clique em ↻, ou remova e carregue a pasta nova.
+2. Abra o popup e busque `Samsung Galaxy S25 256GB`.
+3. Se a leitura direta falhar, a extensão abre a aba sozinha. Aguarde até cerca de 30 s.
+4. Se aparecer **Ação necessária**, clique em **Ir para a aba do ML**, resolva a verificação e clique em **Ler aba do ML**.
+5. Com resultados, veja no resumo a linha "Fonte: … estratégia …" e confira se 3 anúncios abrem a página certa, com o mesmo título e preço.
+6. Se falhar, clique em **Copiar diagnóstico** e envie o JSON junto com a mensagem exibida.
 
 ## 10. Limitações conhecidas
-- **Sem teste com dados reais ainda**: o ML bloqueia (403) acessos vindos de servidores. Da casa do usuário, o comportamento esperado é diferente, mas não foi verificado.
+- **Coleta real ainda não confirmada**: o ML bloqueia (403, "Hubo un error") o servidor de desenvolvimento, inclusive numa aba do Chromium. As estratégias `json` e `dom` usam o formato conhecido das páginas do ML e foram testadas só com HTML sintético. O diagnóstico existe para fechar essa lacuna com dados do seu navegador.
+- A leitura pela aba abre uma aba em segundo plano por alguns segundos.
 - A leitura da página pública depende do HTML do ML e pode quebrar se o layout mudar.
 - A equivalência é heurística, baseada no texto do título. Não diferencia cores nem modelos sem marcador no título, e pode errar em títulos incomuns.
 - O frete pago geralmente não é informado na listagem, então o total com frete pago fica desconhecido (`*`).
@@ -122,8 +147,10 @@ npm run test:e2e    # 21 verificações com a extensão carregada no Chromium (r
 manifest.json        MV3
 background.js        menu de contexto
 app.html/css/js      interface (popup e aba)
-lib/mercadolivre.js  busca (API oficial + página pública), parser e validação de links/imagens
+lib/mercadolivre.js  busca (API oficial + leitura direta) e mensagens de falha
+lib/ml-parser.js     leitor de anúncios (json/dom/links) + diagnóstico; script clássico, também injetado na aba
+lib/tab-reader.js    busca pela aba do navegador (chrome.tabs + chrome.scripting)
 lib/analyzer.js      equivalência, comparação e classificação
 lib/storage.js       histórico em chrome.storage.local (com poda)
-tests/               unitários (node --test) e e2e (Playwright, rede simulada)
+tests/               unitários (node --test) e e2e (Playwright, rede simulada; tab.e2e com servidor HTTPS local)
 ```

@@ -1,4 +1,5 @@
 import { searchMercadoLivre, SearchError } from './lib/mercadolivre.js';
+import { searchViaTab, readOpenTab, focusTab, TabReadError } from './lib/tab-reader.js';
 import { analyze, fmt } from './lib/analyzer.js';
 import * as store from './lib/storage.js';
 
@@ -44,32 +45,124 @@ async function runSearch(query) {
   $('#results').replaceChildren();
   $('#summary').hidden = true;
 
+  const signal = controller.signal;
+  const diagnostics = [];
   try {
-    const { source, items } = await searchMercadoLivre(query, { signal: controller.signal });
-    const history = await store.getPriceHistory();
-    const analysis = analyze(items, history, Date.now(), query);
-    current = { query, source, analysis };
-    setStatus(null);
+    let found;
     try {
-      await store.recordSearch(query, source, analysis);
-    } catch (err) {
-      // Falha ao salvar não pode esconder resultados já obtidos.
-      setStatus('Resultados exibidos, mas o histórico não pôde ser salvo: ' + (err.message || err), [], true);
+      found = await searchMercadoLivre(query, { signal });
+    } catch (e) {
+      if (e.name === 'AbortError' || !(e instanceof SearchError) || !e.blocked) throw e;
+      if (e.diagnostic) diagnostics.push(e.diagnostic);
+      // Leitura direta bloqueada ou sem anúncios reconhecidos → página aberta numa aba do navegador.
+      setStatus('A leitura direta não trouxe anúncios. Abrindo a página de resultados do Mercado Livre numa aba em segundo plano…', e.details);
+      try {
+        const r = await searchViaTab(query);
+        if (signal.aborted) return;
+        diagnostics.push(r.diagnostic);
+        found = { source: `Aba do Mercado Livre aberta no navegador (estratégia ${r.diagnostic.estrategia})`, items: r.items };
+      } catch (te) {
+        if (te.diagnostic) diagnostics.push(te.diagnostic);
+        te.directDetails = e.details;
+        throw te;
+      }
     }
-    renderSummary();
-    renderResults();
+    if (signal.aborted) return;
+    await showResults(query, found.source, found.items);
   } catch (e) {
     if (e.name === 'AbortError') return;
-    current = null;
-    const details = e instanceof SearchError ? e.details : [String(e.message || e)];
-    setStatus(e.message || 'Erro na busca.', details, true);
+    showSearchError(e, diagnostics);
   } finally {
     setBusy(false);
   }
 }
 
+async function showResults(query, source, items) {
+  const history = await store.getPriceHistory();
+  const analysis = analyze(items, history, Date.now(), query);
+  current = { query, source, analysis };
+  setStatus(null);
+  try {
+    await store.recordSearch(query, source, analysis);
+  } catch (err) {
+    // Falha ao salvar não pode esconder resultados já obtidos.
+    setStatus('Resultados exibidos, mas o histórico não pôde ser salvo: ' + (err.message || err), [], true);
+  }
+  renderSummary();
+  renderResults();
+}
+
+function showSearchError(e, diagnostics) {
+  current = null;
+  const details = [];
+  if (e.directDetails) details.push(...e.directDetails.map((d) => 'Leitura direta — ' + d));
+  if (e instanceof SearchError) details.push(...e.details);
+  else if (e instanceof TabReadError) details.push('Aba do navegador — ' + e.message);
+  const msg = e instanceof TabReadError
+    ? (e.needsUser ? 'Ação necessária na aba do Mercado Livre.' : 'Não foi possível obter anúncios reais.')
+    : (e.message || 'Erro na busca.');
+  setStatus(msg, details.length ? details : [String(e.message || e)], true);
+  const actions = document.createElement('div');
+  actions.className = 'status-actions';
+  if (e instanceof TabReadError && e.tabId != null) {
+    actions.append(button('Ir para a aba do ML', () => focusTab(e.tabId).catch(() => {})));
+  }
+  actions.append(button('Ler aba do ML', readTabNow));
+  if (diagnostics.length) actions.append(button('Copiar diagnóstico', (ev) => copyDiagnostic(diagnostics, ev.target)));
+  $('#status').append(actions);
+}
+
+
+function button(text, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'ghost';
+  b.textContent = text;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+async function copyDiagnostic(diags, btn) {
+  const text = JSON.stringify({ radarDeOfertas: chrome.runtime.getManifest().version, quando: new Date().toISOString(), diagnosticos: diags }, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Diagnóstico copiado ✓';
+  } catch {
+    // Sem permissão de área de transferência: mostra o texto para copiar manualmente.
+    const ta = document.createElement('textarea');
+    ta.className = 'diag'; ta.readOnly = true; ta.value = text;
+    $('#status').append(ta);
+    ta.select();
+  }
+}
+
+// Lê os anúncios da página de resultados do ML aberta pelo usuário.
+async function readTabNow() {
+  controller?.abort();
+  controller = new AbortController();
+  const signal = controller.signal;
+  setBusy(true);
+  setStatus('Lendo anúncios da aba do Mercado Livre…');
+  $('#results').replaceChildren();
+  $('#summary').hidden = true;
+  try {
+    const r = await readOpenTab();
+    if (signal.aborted) return;
+    const query = r.query || $('#q').value.trim() || 'mercado livre';
+    $('#q').value = query;
+    await showResults(query, `Aba do Mercado Livre aberta no navegador (estratégia ${r.diagnostic.estrategia})`, r.items);
+  } catch (e) {
+    if (signal.aborted) return;
+    showSearchError(e, e.diagnostic ? [e.diagnostic] : []);
+  } finally {
+    setBusy(false);
+  }
+}
+$('#readTab').addEventListener('click', readTabNow);
+
 function setBusy(b) {
   $('#searchBtn').disabled = b;
+  $('#readTab').disabled = b;
   $('#searchBtn').textContent = b ? 'Buscando…' : 'Buscar';
 }
 

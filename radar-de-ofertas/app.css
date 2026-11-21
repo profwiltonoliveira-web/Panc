@@ -95,3 +95,8 @@ h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: v
 
 .card.other { opacity: .72; border-style: dashed; }
 .star:disabled { opacity: .3; cursor: not-allowed; }
+
+.status-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.status-actions .ghost { color: var(--text); font-size: 12px; }
+.status textarea.diag { width: 100%; height: 140px; margin-top: 8px; font: 11px/1.3 ui-monospace, monospace; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
+#readTab { white-space: nowrap; }

@@ -5,3 +5,4 @@ node_modules
 .DS_Store
 *.tsbuildinfo
 dist/radar-de-ofertas-v0.2.0/
+dist/radar-de-ofertas-v0.3.0/

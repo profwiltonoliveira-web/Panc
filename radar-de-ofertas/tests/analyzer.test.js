@@ -183,3 +183,46 @@ test('poda do histórico preserva itens acompanhados e remove os mais antigos', 
   assert.ok(prices.MLB0, 'acompanhado mantido');
   assert.deepEqual(Object.keys(prices).sort(), ['MLB0', 'MLB6', 'MLB7', 'MLB8', 'MLB9']);
 });
+
+// ---------- v0.3: leitor de JSON "polycard" (formato de dados embutido na página do ML) ----------
+// Observação: a estrutura abaixo é SINTÉTICA, modelada no formato polycard conhecido;
+// a confirmação com página real depende do diagnóstico gerado no navegador do usuário.
+import '../lib/ml-parser.js';
+const RML = globalThis.RadarML;
+
+test('sliceJsonObject respeita chaves dentro de strings', () => {
+  const t = 'x={"polycard":{"a":"}{","b":{"c":1}},"z":2}';
+  const start = t.indexOf('{', t.indexOf('"polycard"'));
+  assert.equal(RML.sliceJsonObject(t, start), '{"a":"}{","b":{"c":1}}');
+});
+
+test('polycardToItem extrai título, preço, preço "de", frete, link e imagem', () => {
+  const it = RML.polycardToItem({
+    metadata: { id: 'MLB5123456789', url: 'produto.mercadolivre.com.br/MLB-5123456789-samsung-galaxy-s25-256gb-_JM', url_params: '#polycard_client=search' },
+    pictures: { pictures: [{ id: '123456-MLA00000000000_012025' }] },
+    components: [
+      { type: 'title', title: { text: 'Samsung Galaxy S25 256GB 12GB RAM Azul' } },
+      { type: 'price', price: { current_price: { value: 4299.9, currency: 'BRL' }, previous_price: { value: 6999 } } },
+      { type: 'shipping', shipping: { text: 'Frete grátis' } },
+      { type: 'seller', seller: { text: 'Por Samsung' } }
+    ]
+  });
+  assert.equal(it.id, 'MLB5123456789');
+  assert.equal(it.title, 'Samsung Galaxy S25 256GB 12GB RAM Azul');
+  assert.equal(it.price, 4299.9);
+  assert.equal(it.originalPrice, 6999);
+  assert.equal(it.freeShipping, true);
+  assert.equal(it.seller, 'Samsung');
+  assert.match(it.link, /^https:\/\/produto\.mercadolivre\.com\.br\/MLB-5123456789/);
+  assert.match(it.image, /^https:\/\/http2\.mlstatic\.com\//);
+});
+
+test('polycardToItem: catálogo recebe wid; sem preço ou link externo é descartado', () => {
+  const cat = RML.polycardToItem({
+    metadata: { id: 'MLB5000000001', url: 'www.mercadolivre.com.br/samsung-galaxy-s25/p/MLB45678901' },
+    components: [{ type: 'title', title: { text: 'Samsung Galaxy S25' } }, { type: 'price', price: { current_price: { value: 4000 } } }]
+  });
+  assert.equal(cat.id, 'MLB5000000001');
+  assert.equal(RML.polycardToItem({ metadata: { url: 'produto.mercadolivre.com.br/MLB-1234567' }, components: [{ type: 'title', title: { text: 'X' } }] }), null);
+  assert.equal(RML.polycardToItem({ metadata: { url: 'evil.com/MLB-1234567' }, components: [{ type: 'title', title: { text: 'X' } }, { type: 'price', price: { current_price: { value: 1 } } }] }), null);
+});
