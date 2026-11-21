@@ -155,3 +155,24 @@ button.primary:disabled { opacity: .6; cursor: progress; }
 table.audit { border-collapse: collapse; width: 100%; font-size: 12px; background: var(--panel); }
 table.audit th, table.audit td { border-bottom: 1px solid var(--border); padding: 4px 6px; text-align: right; white-space: nowrap; }
 table.audit th:first-child, table.audit td:first-child { text-align: left; }
+
+/* ---------- v0.6 ---------- */
+.modes { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+.modes .mode { border: 0; background: var(--panel); padding: 7px 16px; color: var(--muted); }
+.modes .mode.active { background: var(--accent); color: var(--accent-text); font-weight: 700; }
+.brand-chips { margin: 6px 0; font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+.chip.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.cat-group h4 { margin: 14px 0 6px; font-size: 14px; }
+.hl-section { margin-bottom: 14px; }
+.hl-section h3 { display: flex; justify-content: space-between; align-items: baseline; }
+.hl-section h3 .muted { text-transform: none; letter-spacing: 0; }
+.badge.competitivo { color: var(--boa); background: var(--boa-bg); }
+.disc-a { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--regular-bg); color: var(--regular); }
+.disc-a.comprovado, .disc-a.corroborado { background: var(--excelente-bg); color: var(--excelente); }
+.disc-a.campanha { background: var(--boa-bg); color: var(--boa); }
+.disc-a.artificial { background: var(--suspeito-bg); color: var(--suspeito); }
+.report table { border-collapse: collapse; font-size: 12px; margin: 6px 0 10px; background: var(--panel); }
+.report td, .report th { border: 1px solid var(--border); padding: 3px 8px; text-align: right; }
+.report td:first-child, .report th:first-child { text-align: left; }
+.brand-tag { font-size: 11px; color: var(--muted); }

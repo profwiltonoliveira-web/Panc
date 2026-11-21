@@ -13,6 +13,8 @@ import { buildSources, categorize } from './categories.js';
 import * as store from './storage.js';
 import { scoreAll, LABEL_RANK } from './scoring.js';
 import { isAccessoryTitle } from './product.js';
+import { BRANDS, resolveBrand, matchBrand, buildBrandSources, learnTerms, nextPageUrl } from './brands.js';
+import { CATEGORY_BY_ID } from './categories.js';
 
 const PAGE_DELAY_MS = 3000;
 const BACKOFF_MS = 6 * 60 * 60 * 1000;
@@ -56,6 +58,15 @@ export function requestStop() { stopRequested = true; }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Intervalo mínimo GLOBAL entre requisições ao ML (vale entre tarefas diferentes também:
+// ex.: uma busca por marca iniciada logo após outra terminar).
+let lastRequestAt = 0;
+async function throttle() {
+  const wait = lastRequestAt + PAGE_DELAY_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastRequestAt = Date.now();
+}
+
 // ---------- leitura direta (offscreen) ----------
 async function ensureOffscreen() {
   try {
@@ -74,6 +85,7 @@ async function ensureOffscreen() {
 
 async function readDirect(url) {
   await ensureOffscreen();
+  await throttle();
   const msg = { target: 'offscreen', type: 'read', url, version: chrome.runtime.getManifest().version };
   for (let attempt = 0; ; attempt++) {
     try {
@@ -124,6 +136,7 @@ class TabSession {
 
   async read(url) {
     await this.open();
+    await throttle();
     await this.navigate(url);
     await chrome.scripting.executeScript({ target: { tabId: this.tabId }, files: ['lib/ml-parser.js'] });
     const [res] = await chrome.scripting.executeScript({
@@ -166,26 +179,72 @@ function compactDiag(d) {
  * @returns resumo da varredura
  */
 export function runRadar(mode = 'manual') {
+  return runJob({ kind: 'radar', mode });
+}
+
+/**
+ * Executa uma tarefa de descoberta. Uma por vez (respeita os limites das fontes).
+ * job: { kind: 'radar' | 'marca' | 'categoria', mode: 'manual' | 'auto', brand?: string, category?: string }
+ */
+export function runJob(job) {
   if (running) return running;
   stopRequested = false;
-  running = scan(mode).finally(() => { running = null; });
+  running = scan(job.mode || 'manual', job)
+    .catch(async (e) => {
+      // Falha inesperada: registra no estado (visível no painel e no diagnóstico) em vez de sumir.
+      console.error('Radar: varredura falhou', e);
+      await store.setRadarState({ running: false, mode: job.mode || 'manual', job: { kind: job.kind || 'radar', label: job.kind === 'marca' ? `Marca: ${job.brand}` : 'Radar' }, startedAt: Date.now(), error: String((e && e.stack) || e), message: 'A varredura falhou por um erro interno: ' + String((e && e.message) || e) });
+      return null;
+    })
+    .finally(() => { running = null; });
   return running;
 }
 
-async function scan(mode) {
+async function brandRegistry() {
+  const { customBrands } = await store.getBrandData();
+  return { ...BRANDS, ...customBrands };
+}
+
+/** Fontes da tarefa: radar (+ marcas monitoradas), marca ou categoria. */
+async function jobSources(job, settings, stats) {
+  if (job.kind === 'marca') {
+    const brand = resolveBrand(job.brand, (await store.getBrandData()).customBrands);
+    return { sources: buildBrandSources(brand, { maxTerms: 8, maxPages: 2 }), brand };
+  }
+  if (job.kind === 'categoria') {
+    const pages = 3;
+    const list = buildSources({ categories: [job.category], pages }).filter((s) => s.category === job.category);
+    return { sources: list, label: (CATEGORY_BY_ID[job.category] || {}).name };
+  }
+  const list = prioritizeSources(buildSources(settings), stats);
+  // Marcas monitoradas: poucas consultas por marca (marca + 2 linhas, só pág. 1) em cada varredura.
+  const reg = await brandRegistry();
+  for (const id of settings.monitorBrands || []) {
+    const b = reg[id] ? { id, ...reg[id] } : resolveBrand(id, reg);
+    list.push(...buildBrandSources(b, { maxTerms: 2, maxPages: 1 }).map((x) => ({ ...x, monitored: true })));
+  }
+  return { sources: list };
+}
+
+async function scan(mode, job = { kind: 'radar' }) {
   const settings = await store.getSettings();
   const allowTab = mode === 'manual' ? settings.allowTabManual : settings.allowTabAuto;
   const { backoff = {} } = await chrome.storage.local.get('backoff');
   const now0 = Date.now();
   const stats = await store.getSourceStats();
-  const all = prioritizeSources(buildSources(settings), stats);
+  const js = await jobSources(job, settings, stats);
+  const all = js.sources;
   const sources = mode === 'auto' ? all.filter((s) => !(backoff[s.id] > now0)) : all;
+  const reg = await brandRegistry();
+  const brandOf = (id) => (js.brand && js.brand.id === id ? js.brand : reg[id] ? { id, ...reg[id] } : resolveBrand(id, reg));
+  const jobInfo = { kind: job.kind || 'radar', brand: js.brand ? js.brand.id : null, brandName: js.brand ? js.brand.name : null, category: job.category || null, label: js.brand ? `Marca: ${js.brand.name}` : js.label ? `Categoria: ${js.label}` : 'Radar' };
+  const brandTally = { kept: 0, compat: 0, excluded: 0, categories: {}, learned: [] };
   const seenInScan = new Set();
   const byBase = new Map(); // resultado da página anterior de cada fonte
-  const scanRec = { t: now0, mode, finished: null, sources: [], found: 0, newOffers: 0, stoppedReason: null };
+  const scanRec = { t: now0, mode, job: jobInfo, finished: null, sources: [], found: 0, newOffers: 0, stoppedReason: null };
   let session = new TabSession();
   let tabBlocked = false, directFailStreak = 0;
-  const state = (extra) => store.setRadarState({ running: true, mode, startedAt: now0, total: sources.length, done: scanRec.sources.length, found: scanRec.found, ...extra });
+  const state = (extra) => store.setRadarState({ running: true, mode, job: jobInfo, startedAt: now0, total: sources.length, done: scanRec.sources.length, found: scanRec.found, ...extra });
 
   await state({ message: 'Iniciando…' });
   try {
@@ -228,7 +287,6 @@ async function scan(mode) {
       const emptyPage = rec.diagnostic && rec.diagnostic.tipoDePagina === 'sem-resultados';
       if (!items.length && allowTab && !tabBlocked && !emptyPage) {
         try {
-          await sleep(PAGE_DELAY_MS);
           await state({ message: `Lendo ${src.name} numa aba do navegador…`, current: src.name });
           let r = await session.read(src.url);
           // Página presa no carregamento com a janela oculta: na varredura manual, tenta UMA vez
@@ -264,8 +322,27 @@ async function scan(mode) {
       if (items.length) {
         // Duplicados dentro da própria página (mesmo ID) contam uma vez.
         items = [...new Map(items.map((it) => [it.id, it])).values()];
-        const enriched = items.map((it) => ({ ...it, category: src.category || categorize(it.title) }));
-        const { added } = await store.mergeOffers(enriched, src);
+        let enriched = items.map((it) => ({ ...it, category: src.category || categorize(it.title) }));
+        // Busca por marca: só fica o que é REALMENTE da marca; acessórios de terceiros ficam marcados.
+        if (src.brand) {
+          const brand = brandOf(src.brand);
+          const kept = [];
+          for (const it of enriched) {
+            const m = matchBrand(it, brand);
+            if (m.match === 'outra-marca' || m.match === 'ausente') { rec.excluded = (rec.excluded || 0) + 1; brandTally.excluded++; continue; }
+            if (m.match === 'compativel') { rec.compat = (rec.compat || 0) + 1; brandTally.compat++; } else { brandTally.kept++; brandTally.categories[it.category] = (brandTally.categories[it.category] || 0) + 1; }
+            kept.push({ ...it, brands: { [brand.id]: m.match } });
+          }
+          enriched = kept;
+          // Marca não cadastrada: aprende linhas de produto com os títulos da 1ª página
+          if (job.kind === 'marca' && !src.term && !src.page && js.brand && !(js.brand.terms || []).length) {
+            const learned = learnTerms(kept.filter((x) => x.brands[brand.id] !== 'compativel'));
+            brandTally.learned = learned;
+            const extra = learned.map((term) => ({ id: `marca-${brand.id}-${term}`, name: `${brand.name}: ${term}`, url: src.url.replace(/[^/]+$/, '') + `${term}-${src.url.split('/').pop()}`, category: null, brand: brand.id, term, paginate: { maxPages: 1 } }));
+            sources.splice(i + 1, 0, ...extra);
+          }
+        }
+        const { added } = enriched.length ? await store.mergeOffers(enriched, src) : { added: 0 };
         rec.status = 'ok';
         rec.count = items.length;
         rec.unique = items.filter((it) => !seenInScan.has(it.id)).length; // não vistos em fontes anteriores desta varredura
@@ -274,6 +351,11 @@ async function scan(mode) {
         items.forEach((it) => seenInScan.add(it.id));
         scanRec.found += items.length;
         scanRec.newOffers += added;
+        // Paginação (busca por marca): próxima página só se esta foi cheia e trouxe anúncios novos.
+        const page = src.page || 1;
+        if (src.paginate && page < src.paginate.maxPages && rec.count >= 40 && rec.unique / rec.count >= NEXT_PAGE_MIN_UNIQUE) {
+          sources.splice(i + 1, 0, { ...src, id: `${src.id.replace(/-p\d+$/, '')}-p${page + 1}`, name: `${src.name.replace(/ \(pág\. \d+\)$/, '')} (pág. ${page + 1})`, url: nextPageUrl(src.url, page * rec.count + 1), page: page + 1 });
+        }
       } else if (rec.status !== 'bloqueado') {
         rec.status = rec.diagnostic && rec.diagnostic.tipoDePagina === 'sem-resultados' ? 'vazio' : 'erro';
       }
@@ -286,15 +368,20 @@ async function scan(mode) {
       if (!allowTab || tabBlocked) {
         if (directFailStreak >= 3 && scanRec.found === 0) { scanRec.stoppedReason = 'leitura direta bloqueada em 3 fontes seguidas' + (tabBlocked ? ' e aba com verificação/bloqueio' : ' e leitura por aba desativada'); break; }
       }
-      if (i < sources.length - 1) await sleep(PAGE_DELAY_MS);
+      // (intervalo entre requisições garantido por throttle())
     }
   } finally {
     await session.close();
     scanRec.finished = Date.now();
     await store.saveScan(scanRec);
     try { await store.updateSourceStats(scanRec); } catch { /* estatística não pode derrubar a varredura */ }
+    if (job.kind === 'marca' && js.brand) {
+      scanRec.brand = { id: js.brand.id, name: js.brand.name, ...brandTally };
+      await store.saveScan(scanRec);
+      await store.addBrandSearch({ t: now0, finished: scanRec.finished, brand: js.brand.id, name: js.brand.name, known: js.brand.known, found: scanRec.found, kept: brandTally.kept, compat: brandTally.compat, excluded: brandTally.excluded, categories: brandTally.categories, learnedTerms: brandTally.learned, sources: scanRec.sources.filter((x) => !x.skipped).length, ok: scanRec.sources.filter((x) => x.status === 'ok').length, stoppedReason: scanRec.stoppedReason });
+    }
     await chrome.storage.local.set({ backoff });
-    await store.setRadarState({ running: false, mode, startedAt: now0, finishedAt: scanRec.finished, total: sources.length, done: scanRec.sources.length, found: scanRec.found, newOffers: scanRec.newOffers, needsUser: scanRec.needsUser || null, stoppedReason: scanRec.stoppedReason, message: summaryMessage(scanRec) });
+    await store.setRadarState({ running: false, mode, job: jobInfo, startedAt: now0, finishedAt: scanRec.finished, total: sources.length, done: scanRec.sources.length, found: scanRec.found, newOffers: scanRec.newOffers, needsUser: scanRec.needsUser || null, stoppedReason: scanRec.stoppedReason, message: summaryMessage(scanRec) });
   }
   return scanRec;
 }

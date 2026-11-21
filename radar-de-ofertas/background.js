@@ -5,7 +5,7 @@
 //  - notificações de novas oportunidades boas encontradas no monitoramento;
 //  - menu de contexto "Buscar no Radar de Ofertas" (busca manual).
 
-import { runRadar, requestStop, isRunning, newGoodOffers } from './lib/discovery.js';
+import { runRadar, runJob, requestStop, isRunning, newGoodOffers } from './lib/discovery.js';
 import { getSettings } from './lib/storage.js';
 
 const PANEL = 'app.html';
@@ -74,6 +74,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const already = isRunning();
     runRadar('manual'); // segue em segundo plano; o painel acompanha pelo chrome.storage
     sendResponse({ started: !already, running: true });
+  } else if (msg.type === 'job:start') {
+    // Busca por marca ou por categoria (mesmo motor, mesmos limites; uma tarefa por vez)
+    const already = isRunning();
+    if (!already) runJob({ kind: msg.kind, mode: 'manual', brand: msg.brand, category: msg.category });
+    sendResponse({ started: !already, running: true, busy: already });
   } else if (msg.type === 'radar:stop') {
     requestStop();
     sendResponse({ ok: true });

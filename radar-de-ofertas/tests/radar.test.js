@@ -13,8 +13,11 @@ test('preço baixo sem histórico NÃO vira desconto comprovado nem promoção',
   // v0.5: antes virava "boa"; o requisito agora é não classificar produto barato como promoção.
   const r = scoreOffer(offer('MLB1', 'Fone X', 50), null, { n: 5, median: 100 });
   assert.equal(r.discountKind, null);
-  assert.equal(r.label, 'regular');
-  assert.equal(r.priceSignal, 'preco-excepcional'); // o preço baixo aparece como SINAL DE PREÇO
+  // v0.6: 50% abaixo de 5 equivalentes é evidência forte → "excelente" pela ATRATIVIDADE, sem desconto
+  assert.equal(r.label, 'excelente');
+  assert.match(r.basis, /abaixo de 5 equivalentes/);
+  assert.equal(r.realDiscount.level, 'nenhum');
+  assert.equal(r.priceSignal, 'preco-excepcional');
   assert.ok(r.reasons.some((x) => /abaixo da mediana de 5 anúncios equivalentes/.test(x)));
 });
 
@@ -26,8 +29,12 @@ test('desconto anunciado é rotulado como anunciado, não comprovado', () => {
   // v0.5: sem histórico e sem equivalentes, o anúncio é "não confirmado" (antes: "boa")
   assert.equal(r.label, 'regular');
   assert.equal(r.priceSignal, 'nao-confirmada');
-  // com equivalentes que não o contradizem, vira "boa"
-  assert.equal(scoreOffer(offer('MLB1', 'Air Fryer Y', 300, { originalPrice: 450 }), null, { n: 4, median: 380 }).label, 'boa');
+  // v0.6: "de" R$ 450 compatível com 4 equivalentes (mediana 380) e preço 21% abaixo deles → corroborado → excelente
+  const c = scoreOffer(offer('MLB1', 'Air Fryer Y', 300, { originalPrice: 450 }), null, { n: 4, median: 380 });
+  assert.equal(c.discountKind, 'corroborado');
+  assert.equal(c.label, 'excelente');
+  // com só 3 equivalentes, o mesmo caso é "boa"
+  assert.equal(scoreOffer(offer('MLB1', 'Air Fryer Y', 300, { originalPrice: 450 }), null, { n: 3, median: 380 }).label, 'boa');
 });
 
 test('desconto comprovado pelo histórico → excelente', () => {

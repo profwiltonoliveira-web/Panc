@@ -124,17 +124,17 @@ function selfSigned() {
     const card = p.locator('#offerList .offer', { hasText: 'Galaxy A15 128GB Azul' });
     assert.equal(await card.locator('.o-price').innerText(), 'R$ 899,00');
     assert.equal(await card.locator('.o-prev').innerText(), 'de R$ 1.299,00');
-    assert.equal(await card.locator('.o-disc').innerText(), '31% OFF anunciado');
+    assert.equal(await card.locator('.o-disc').innerText(), '31% OFF em campanha do ML');
     assert.match(await card.locator('.o-meta').innerText(), /Samsung · loja oficial · Frete grátis/);
     assert.equal(await card.locator('.o-title').getAttribute('href'), 'https://produto.mercadolivre.com.br/MLB-7000000001-x-_JM');
     assert.match(await card.locator('img').getAttribute('src'), /^https:\/\/http2\.mlstatic\.com\//);
-    // v0.5: só 1 equivalente e sem histórico → anúncio de 31% OFF é "não confirmado", não promoção
-    assert.equal(await card.locator('.badge').innerText(), 'Sem promoção confirmada');
-    assert.equal(await card.locator('.sig').innerText(), 'Oportunidade não confirmada');
+    // v0.6: loja oficial + página oficial de ofertas do ML + 31% OFF → evidência "campanha oficial do ML" → boa
+    assert.equal(await card.locator('.badge').innerText(), 'Boa oportunidade');
+    assert.equal(await card.locator('.disc-a').innerText(), 'Desconto em campanha oficial do ML');
     await card.locator('.o-copy').click();
     const txt = await p.evaluate(() => navigator.clipboard.readText());
     assert.match(txt, /🔥 Smartphone Samsung Galaxy A15 128GB Azul/);
-    assert.match(txt, /De R\$ 1\.299,00 por R\$ 899,00 \(31% OFF anunciado pela loja\)/);
+    assert.match(txt, /De R\$ 1\.299,00 por R\$ 899,00 \(31% OFF em oferta do Mercado Livre\)/);
     assert.match(txt, /👉 https:\/\/produto\.mercadolivre\.com\.br\/MLB-7000000001-x-_JM/);
   });
 
@@ -267,8 +267,7 @@ function selfSigned() {
   await check('v0.5: card mostra sinal de preço e subnotas separadas', async () => {
     await p.click('[data-tab=ofertas][data-group=""]');
     const card = p.locator('#offerList .offer', { hasText: 'Galaxy A15 128GB Azul' });
-    assert.equal(await card.locator('.sig').innerText(), 'Oportunidade não confirmada');
-    assert.match(await card.locator('.o-sub').innerText(), /Preço: .* · Comprovação do desconto: 0\/100 · Desconto anunciado: \d+\/100/);
+    assert.match(await card.locator('.o-sub').innerText(), /Desconto real \(A\): \d+\/100 · Atratividade do preço \(B\): (sem referência|\d+\/100) \(\d+ equivalentes?\)/);
   });
 
   await check('v0.5: pesos configuráveis alteram a nota e são salvos', async () => {
@@ -276,14 +275,14 @@ function selfSigned() {
     await p.click('.weights summary');
     const card = () => p.locator('#topOffers .offer', { hasText: 'Galaxy A15 128GB Azul' }).locator('.o-score').innerText();
     const before = await card();
-    await p.fill('#w-anunciado', '100'); await p.press('#w-anunciado', 'Tab');
+    await p.fill('#w-desconto', '100'); await p.press('#w-desconto', 'Tab');
     await p.waitForTimeout(500);
     const after = await card();
     assert.notEqual(before, after);
-    assert.equal((await storage()).settings.weights.anunciado, 100);
+    assert.equal((await storage()).settings.weights.desconto, 100);
     await p.click('#weightsReset');
     await p.waitForTimeout(300);
-    assert.equal(await p.inputValue('#w-anunciado'), '10');
+    assert.equal(await p.inputValue('#w-desconto'), '35');
   });
 
   await check('busca manual continua disponível', async () => {

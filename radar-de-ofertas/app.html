@@ -34,8 +34,9 @@
       <div id="radarStatus" class="status" hidden></div>
       <div class="panel-grid">
         <div class="panel">
-          <h3>Melhores oportunidades agora</h3>
-          <p class="hint">Ordenadas pela pontuação (0–100). "Desconto comprovado" só aparece quando o Radar já observou o preço do anúncio em dias anteriores.</p>
+          <div id="highlights"></div>
+          <h3>Todas as ofertas relevantes</h3>
+          <p class="hint">Todas as ofertas não suspeitas, pela pontuação (0–100). Cada card mostra a classe, o <b>desconto real</b> (A) e a <b>atratividade do preço</b> (B), com a evidência em "Por quê?".</p>
           <ul id="topOffers" class="offers"></ul>
         </div>
         <aside class="panel side">
@@ -92,10 +93,12 @@
         <label class="chk"><input type="checkbox" id="oFree"> Frete grátis</label>
         <select id="oCond"><option value="">Qualquer condição</option><option value="novo">Novo</option><option value="usado">Usado/recondicionado</option></select>
         <select id="oLabel">
-          <option value="">Qualquer qualidade</option>
+          <option value="" selected>Qualquer classe</option>
+          <option value="competitivo">Preço competitivo ou melhor</option>
           <option value="boa">Boa ou excelente</option>
           <option value="excelente">Só excelente</option>
-          <option value="suspeito">Só suspeitos</option>
+          <option value="regular">Só preço regular</option>
+          <option value="suspeito">Só ofertas suspeitas</option>
         </select>
         <label class="chk"><input type="checkbox" id="oAcc"> Ocultar acessórios</label>
         <select id="oSort">
@@ -110,6 +113,61 @@
     </section>
 
     <section id="tab-buscar" class="tab">
+      <div class="modes" role="tablist" aria-label="Modalidade de busca">
+        <button type="button" class="mode active" data-mode="produto">Produto</button>
+        <button type="button" class="mode" data-mode="marca">Marca</button>
+        <button type="button" class="mode" data-mode="categoria">Categoria</button>
+      </div>
+
+      <div id="mode-marca" class="mode-pane" hidden>
+        <div class="search">
+          <input id="brandInput" list="brandList" placeholder="Escolha ou digite uma marca (ex.: Nike, Samsung, JBL…)" autocomplete="off" maxlength="60">
+          <datalist id="brandList"></datalist>
+          <button type="button" id="brandSearch" class="primary">Buscar marca</button>
+          <button type="button" id="brandFav" class="ghost" title="Salvar nas marcas favoritas">☆ Favoritar</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="brandMonitor"> Monitorar esta marca nas varreduras do radar (manuais e periódicas)</label>
+        <div class="brand-chips"><span class="muted">Marcas favoritas:</span> <span id="brandFavs"></span></div>
+        <div class="brand-chips"><span class="muted">Minhas marcas:</span> <span id="myBrands"></span></div>
+        <div id="brandStatus" class="status" hidden></div>
+        <div class="filters">
+          <select id="bCat"><option value="">Todas as categorias</option></select>
+          <label>R$ <input id="bMin" type="number" min="0" placeholder="mín."> a <input id="bMax" type="number" min="0" placeholder="máx."></label>
+          <select id="bLabel">
+            <option value="" selected>Qualquer classe</option>
+            <option value="competitivo">Preço competitivo ou melhor</option>
+            <option value="boa">Boa ou excelente</option>
+            <option value="excelente">Só excelente</option>
+          </select>
+          <label class="chk"><input type="checkbox" id="bCompat"> Mostrar acessórios compatíveis (terceiros)</label>
+          <select id="bSort">
+            <option value="score">Maior pontuação</option>
+            <option value="price">Menor preço</option>
+            <option value="-price">Maior preço</option>
+          </select>
+        </div>
+        <p id="brandSummary" class="muted"></p>
+        <div id="brandResults"></div>
+        <h3>Histórico de buscas por marca</h3>
+        <ul id="brandHistory" class="list"></ul>
+      </div>
+
+      <div id="mode-categoria" class="mode-pane" hidden>
+        <div class="search">
+          <select id="catSelect"></select>
+          <button type="button" id="catSearch" class="primary">Buscar ofertas da categoria</button>
+        </div>
+        <p class="hint">Lê até 3 páginas de ofertas oficiais do Mercado Livre da categoria escolhida.</p>
+        <div id="catStatus" class="status" hidden></div>
+        <div class="filters">
+          <select id="cSort"><option value="score">Maior pontuação</option><option value="price">Menor preço</option></select>
+          <select id="cLabel"><option value="" selected>Qualquer classe</option><option value="competitivo">Preço competitivo ou melhor</option><option value="boa">Boa ou excelente</option></select>
+        </div>
+        <p id="catSummary" class="muted"></p>
+        <ul id="catResults" class="offers"></ul>
+      </div>
+
+      <div id="mode-produto" class="mode-pane">
       <form id="searchForm" class="search">
         <input id="q" type="search" placeholder="Ex.: fone bluetooth jbl" autocomplete="off" required maxlength="120">
         <button type="submit" id="searchBtn">Buscar</button>
@@ -136,6 +194,7 @@
       <div id="summary" class="summary" hidden></div>
       <ul id="results" class="results"></ul>
       <p class="disclaimer">Classificações são estimativas. Um desconto só é tratado como real quando há histórico de preços registrado por esta extensão. Só anúncios equivalentes (mesmo produto, variante e condição) são comparados entre si. "Total" inclui frete apenas quando informado (* = frete não informado).</p>
+      </div>
     </section>
 
     <section id="tab-historico" class="tab">
@@ -143,6 +202,10 @@
         <button id="exportBtn" class="ghost">Exportar JSON</button>
         <button id="clearBtn" class="ghost danger">Apagar histórico</button>
       </div>
+      <h3>Relatório de classificação</h3>
+      <p class="hint">Calculado sobre as ofertas <b>armazenadas neste navegador</b> (dados reais coletados). Compara a classificação antiga (v0.5.1) com a nova (v0.6.0).</p>
+      <div class="row-actions" style="justify-content:flex-start"><button id="reportBtn" class="ghost">Gerar relatório</button><button id="reportCopy" class="ghost" hidden>Copiar relatório (JSON)</button></div>
+      <div id="reportOut" class="report"></div>
       <h3>Varreduras do radar</h3>
       <ul id="scanHistory" class="list"></ul>
       <h3>Auditoria das fontes</h3>

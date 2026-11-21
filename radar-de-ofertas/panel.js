@@ -3,6 +3,8 @@
 // envia comandos e acompanha o progresso pelo chrome.storage.
 
 import { CATEGORIES, CATEGORY_BY_ID, GROUPS } from './lib/categories.js';
+import { BRANDS, resolveBrand, slug as brandSlug } from './lib/brands.js';
+import { classificationReport } from './lib/report.js';
 import { scoreAll, shareText, LABEL_RANK, cleanLink, fmt, DEFAULT_WEIGHTS, WEIGHT_LABELS, normalizeWeights } from './lib/scoring.js';
 import * as store from './lib/storage.js';
 
@@ -141,8 +143,7 @@ function applyFilters(list) {
     if (free && !o.freeShipping) return false;
     if (cond === 'novo' && (o.condition === 'usado' || o.condition === 'recondicionado')) return false;
     if (cond === 'usado' && !(o.condition === 'usado' || o.condition === 'recondicionado')) return false;
-    if (lbl === 'suspeito' && o.label !== 'suspeito') return false;
-    if (lbl && lbl !== 'suspeito' && LABEL_RANK[o.label] < LABEL_RANK[lbl]) return false;
+    if (!labelOk(o, lbl)) return false;
     if (noAcc && o.accessory) return false;
     if (signal && !(o.priceInfo && o.priceInfo.signals.includes(signal))) return false;
     return true;
@@ -153,6 +154,13 @@ function applyFilters(list) {
   else if (sort === 'new') out.sort((a, b) => b.firstSeen - a.firstSeen);
   else out.sort((a, b) => b.score - a.score);
   return out;
+}
+
+// Classe: "suspeito"/"regular" = exatamente; demais = essa classe ou melhor.
+function labelOk(o, lbl) {
+  if (!lbl) return true;
+  if (lbl === 'suspeito' || lbl === 'regular') return o.label === lbl;
+  return o.label !== 'suspeito' && LABEL_RANK[o.label] >= LABEL_RANK[lbl];
 }
 
 function offerCard(o) {
@@ -171,10 +179,14 @@ function offerCard(o) {
     prev.textContent = `média observada R$ ${fmt(o.previousPrice)}`;
     disc.textContent = `−${o.discountPct.toFixed(0)}% comprovado`;
     disc.classList.add('proven');
-  } else if (o.discountKind === 'anunciado') {
+  } else if (o.discountKind === 'corroborado') {
+    prev.textContent = `de R$ ${fmt(o.originalPrice)} · equivalentes R$ ${fmt(o.peerMedian)}`;
+    disc.textContent = `−${o.discountPct.toFixed(0)}% confirmado por ${o.peers} equivalentes`;
+    disc.classList.add('proven');
+  } else if (o.discountKind === 'campanha' || o.discountKind === 'anunciado') {
     prev.textContent = `de R$ ${fmt(o.originalPrice)}`;
     prev.classList.add('strike');
-    disc.textContent = `${o.discountPct.toFixed(0)}% OFF anunciado`;
+    disc.textContent = `${o.discountPct.toFixed(0)}% OFF ${o.discountKind === 'campanha' ? 'em campanha do ML' : 'anunciado'}`;
   }
   const cat = CATEGORY_BY_ID[o.category] || CATEGORY_BY_ID.outros;
   const meta = [];
@@ -190,12 +202,14 @@ function offerCard(o) {
   const sig = node.querySelector('.sig');
   sig.textContent = o.priceSignalText;
   sig.classList.add(o.priceSignal);
-  const sb = o.subscores || {};
-  node.querySelector('.o-sub').textContent = `Preço: ${o.attractiveness == null ? 'sem referência' : o.attractiveness + '/100'}` +
-    ` (${o.peers} equivalente${o.peers === 1 ? '' : 's'})` +
-    ` · Comprovação do desconto: ${sb.comprovacao || 0}/100 · Desconto anunciado: ${sb.anunciado || 0}/100`;
+  const rd = o.realDiscount || { level: 'nenhum', text: 'Sem desconto', value: 0 };
+  const da = el('span', 'disc-a ' + rd.level, rd.text);
+  node.querySelector('.o-row').insertBefore(da, node.querySelector('.o-score'));
+  node.querySelector('.o-sub').textContent = `Desconto real (A): ${rd.value}/100 · Atratividade do preço (B): ${o.attractiveness == null ? 'sem referência' : o.attractiveness + '/100'}` +
+    ` (${o.peers} equivalente${o.peers === 1 ? '' : 's'})`;
   const tags = [];
   if (o.accessory) tags.push('acessório');
+  for (const [b, m] of Object.entries(o.brands || {})) tags.push(`${(BRANDS[b] || { name: b }).name}${m === 'compativel' ? ' (compatível, terceiros)' : m === 'oficial' ? ' (loja oficial)' : ''}`);
   for (const b of o.badges || []) tags.push(b.toLowerCase());
   node.querySelector('.o-tags').textContent = tags.join(' · ');
   const why = node.querySelector('.why ul');
@@ -217,7 +231,8 @@ function offerCard(o) {
 
 function renderOffers() {
   if (view.name === 'radar') {
-    const top = scored.filter((o) => o.label !== 'suspeito').sort((a, b) => b.score - a.score).slice(0, 30);
+    renderHighlights();
+    const top = scored.filter((o) => o.label !== 'suspeito').sort((a, b) => b.score - a.score).slice(0, 60);
     $('#topOffers').replaceChildren(...(top.length ? top.map(offerCard) : [el('li', 'empty', 'Nenhuma oferta ainda. Clique em "Iniciar Radar".')]));
   } else if (view.name === 'ofertas') {
     const list = applyFilters(scored);
@@ -226,6 +241,28 @@ function renderOffers() {
     $('#offerCount').textContent = `${groupName}: ${list.length} oferta(s)` + (list.length > shown.length ? ` (mostrando ${shown.length})` : '') + ` de ${scored.length} encontradas pelo radar.`;
     $('#offerList').replaceChildren(...(shown.length ? shown.map(offerCard) : [el('li', 'empty', scored.length ? 'Nenhuma oferta com os filtros atuais.' : 'Nenhuma oferta ainda. Clique em "Iniciar Radar".')]));
   }
+}
+
+// Destaques do painel: descontos comprovados, preços excepcionais, boas oportunidades, marcas monitoradas.
+function renderHighlights() {
+  const byScore = (a, b) => b.score - a.score;
+  const monitored = new Set(settingsCache.monitorBrands || []);
+  const sections = [
+    ['Descontos comprovados', 'preço abaixo da média que o Radar já observou neste anúncio', scored.filter((o) => o.discountKind === 'comprovado')],
+    ['Preços excepcionais', '≥ 25% abaixo de anúncios equivalentes', scored.filter((o) => o.label !== 'suspeito' && o.priceInfo && o.priceInfo.signals.includes('preco-excepcional'))],
+    ['Boas oportunidades', 'classe boa ou excelente', scored.filter((o) => o.label === 'boa' || o.label === 'excelente')],
+    ['Achados de marcas monitoradas', monitored.size ? [...monitored].map((b) => (BRANDS[b] || { name: b }).name).join(', ') : 'nenhuma marca monitorada — ative em Busca manual → Marca', scored.filter((o) => o.label !== 'suspeito' && Object.keys(o.brands || {}).some((b) => monitored.has(b) && o.brands[b] !== 'compativel'))]
+  ];
+  $('#highlights').replaceChildren(...sections.map(([title, hint, list]) => {
+    const sec = el('section', 'hl-section');
+    const h = el('h3', '', title + ' ');
+    h.append(el('span', 'muted', `${list.length} · ${hint}`));
+    const ul = el('ul', 'offers');
+    const top = list.sort(byScore).slice(0, 6);
+    ul.replaceChildren(...(top.length ? top.map(offerCard) : [el('li', 'empty', 'Nada por enquanto.')]));
+    sec.append(h, ul);
+    return sec;
+  }));
 }
 
 ['#oText', '#oCat', '#oMin', '#oMax', '#oDisc', '#oProven', '#oSignal', '#oFree', '#oCond', '#oLabel', '#oAcc', '#oSort'].forEach((s) =>
@@ -273,8 +310,11 @@ async function copy(text, btn, ok) {
 async function refresh() {
   const r = await store.getRadar();
   watch = r.watch;
+  settingsCache = await store.getSettings();
   scored = scoreAll(Object.values(r.offers), r.prices, Date.now(), weights);
   renderState(r.radarState, r.scans);
+  renderJobStatus(r.radarState);
+  if (view.name === 'buscar') { renderBrandMode(); renderCategoryMode(); }
   renderSources(r.scans);
   renderScans(r.scans);
   renderOffers();
@@ -306,7 +346,7 @@ async function renderAudit() {
 let pending = null;
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (!['offers', 'radarState', 'scans', 'watch', 'prices', 'sourceStats'].some((k) => k in changes)) return;
+  if (!['offers', 'radarState', 'scans', 'watch', 'prices', 'sourceStats', 'brandFavs', 'customBrands', 'brandSearches', 'settings'].some((k) => k in changes)) return;
   clearTimeout(pending);
   pending = setTimeout(refresh, 250); // agrupa várias gravações seguidas
 });
@@ -316,7 +356,186 @@ document.addEventListener('radar:tab', (e) => {
   if (view.name === 'ofertas') fillCategorySelect();
   renderOffers();
   if (view.name === 'historico') { store.getRadar().then((r) => renderScans(r.scans)); renderAudit(); }
+  if (view.name === 'buscar') { renderBrandMode(); renderCategoryMode(); }
 });
+
+// =================== v0.6: modalidades de busca (Produto / Marca / Categoria) ===================
+let settingsCache = {};
+let currentBrand = null;   // id da marca exibida
+let currentCategory = null;
+
+document.querySelectorAll('.modes .mode').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+function setMode(m) {
+  document.querySelectorAll('.modes .mode').forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
+  document.querySelectorAll('.mode-pane').forEach((p) => { p.hidden = p.id !== 'mode-' + m; });
+  if (m === 'marca') renderBrandMode();
+  if (m === 'categoria') renderCategoryMode();
+}
+
+function chip(text, on, onClick, title) {
+  const c = el('button', 'chip' + (on ? ' on' : ''), text);
+  c.type = 'button';
+  if (title) c.title = title;
+  c.addEventListener('click', onClick);
+  return c;
+}
+
+async function brandInputSpec() {
+  const v = $('#brandInput').value.trim();
+  if (!v) return null;
+  const { customBrands } = await store.getBrandData();
+  return resolveBrand(v, customBrands);
+}
+
+$('#brandSearch').addEventListener('click', async () => {
+  const b = await brandInputSpec();
+  if (!b) { $('#brandInput').focus(); return; }
+  currentBrand = b.id;
+  const r = await chrome.runtime.sendMessage({ type: 'job:start', kind: 'marca', brand: $('#brandInput').value.trim() });
+  if (r && r.busy) showBox('#brandStatus', 'Já existe uma varredura em andamento. Aguarde terminar.', true);
+  renderBrandMode();
+});
+$('#brandInput').addEventListener('change', async () => { const b = await brandInputSpec(); if (b) { currentBrand = b.id; renderBrandMode(); } });
+$('#brandFav').addEventListener('click', async () => {
+  const b = await brandInputSpec();
+  if (!b) return;
+  if (!b.known) await store.saveCustomBrand(b.id, b); // marca digitada vira "minha marca"
+  await store.toggleBrandFav(b.id);
+  renderBrandMode();
+});
+$('#brandMonitor').addEventListener('change', async (e) => {
+  const b = await brandInputSpec();
+  if (!b) { e.target.checked = false; return; }
+  if (!b.known) await store.saveCustomBrand(b.id, b);
+  const s = await store.getSettings();
+  const set = new Set(s.monitorBrands || []);
+  if (e.target.checked) set.add(b.id); else set.delete(b.id);
+  await store.saveSettings({ monitorBrands: [...set] });
+});
+['#bCat', '#bLabel', '#bCompat', '#bSort'].forEach((x) => $(x).addEventListener('change', renderBrandResults));
+['#bMin', '#bMax'].forEach((x) => $(x).addEventListener('input', renderBrandResults));
+
+function showBox(sel, msg, isError = false) {
+  const box = $(sel);
+  if (!msg) { box.hidden = true; return; }
+  box.hidden = false;
+  box.className = 'status' + (isError ? ' error' : '');
+  box.textContent = msg;
+}
+
+function renderJobStatus(st) {
+  const kind = st && st.job && st.job.kind;
+  if (kind === 'marca') showBox('#brandStatus', st.running ? `${st.message || 'Buscando…'} (${st.done}/${st.total} consultas · ${st.found || 0} anúncios lidos)` : `${st.job.label}: ${st.message || ''}`, !st.running && !st.found);
+  if (kind === 'categoria') showBox('#catStatus', st.running ? `${st.message || 'Buscando…'} (${st.done}/${st.total} páginas)` : `${st.job.label}: ${st.message || ''}`, !st.running && !st.found);
+}
+
+async function renderBrandMode() {
+  const { brandFavs, customBrands, brandSearches } = await store.getBrandData();
+  const reg = { ...BRANDS, ...customBrands };
+  $('#brandList').replaceChildren(...Object.values(reg).map((b) => { const o = el('option'); o.value = b.name; return o; }));
+  const pick = (id) => { $('#brandInput').value = (reg[id] || { name: id }).name; currentBrand = id; renderBrandMode(); };
+  $('#brandFavs').replaceChildren(...(brandFavs.length ? brandFavs.map((id) => chip('★ ' + (reg[id] || { name: id }).name, id === currentBrand, () => pick(id))) : [el('span', 'muted', 'nenhuma')]));
+  $('#myBrands').replaceChildren(...Object.entries(reg).map(([id, b]) => chip(b.name, id === currentBrand, () => pick(id), customBrands[id] ? 'marca adicionada por você' : 'marca cadastrada')));
+  const b = await brandInputSpec();
+  $('#brandFav').textContent = b && brandFavs.includes(b.id) ? '★ Favorita' : '☆ Favoritar';
+  $('#brandMonitor').checked = !!(b && (settingsCache.monitorBrands || []).includes(b.id));
+  $('#brandHistory').replaceChildren(...(brandSearches.length ? brandSearches.slice(0, 20).map((h) => {
+    const li = el('li');
+    const g = el('div', 'grow');
+    const btn = el('button', 'link', h.name);
+    btn.addEventListener('click', () => pick(h.brand));
+    const cats = Object.entries(h.categories || {}).sort((a, c) => c[1] - a[1]).map(([c, n]) => `${(CATEGORY_BY_ID[c] || { name: c }).name} ${n}`).join(', ');
+    g.append(btn, el('div', 'sub', `${new Date(h.t).toLocaleString('pt-BR')} · ${h.found} lidos · ${h.kept} da marca · ${h.compat} compatíveis (terceiros) · ${h.excluded} descartados (outra marca/irrelevantes) · ${h.ok}/${h.sources} consultas OK` + (cats ? ` · categorias: ${cats}` : '') + (h.learnedTerms && h.learnedTerms.length ? ` · linhas descobertas: ${h.learnedTerms.join(', ')}` : '') + (h.stoppedReason ? ` · interrompida: ${h.stoppedReason}` : '')));
+    li.append(g);
+    return li;
+  }) : [el('li', 'empty', 'Nenhuma busca por marca ainda.')]));
+  renderBrandResults();
+}
+
+function renderBrandResults() {
+  const id = currentBrand;
+  const out = $('#brandResults');
+  if (!id) { out.replaceChildren(); $('#brandSummary').textContent = 'Escolha ou digite uma marca e clique em "Buscar marca".'; return; }
+  const all = scored.filter((o) => o.brands && o.brands[id]);
+  const showCompat = $('#bCompat').checked;
+  const min = Number($('#bMin').value) || 0, max = Number($('#bMax').value) || Infinity;
+  const cat = $('#bCat').value, lbl = $('#bLabel').value;
+  // opções de categoria a partir do que foi encontrado
+  const cats = [...new Set(all.map((o) => o.category))];
+  const sel = $('#bCat');
+  const keep = sel.value;
+  sel.replaceChildren(el('option', '', 'Todas as categorias'), ...cats.map((c) => { const op = el('option', '', (CATEGORY_BY_ID[c] || { name: c }).name); op.value = c; return op; }));
+  sel.firstChild.value = '';
+  sel.value = cats.includes(keep) ? keep : '';
+  const list = all.filter((o) => (showCompat || o.brands[id] !== 'compativel') && o.price >= min && o.price <= max && (!cat || o.category === cat) && labelOk(o, lbl));
+  const sort = $('#bSort').value;
+  list.sort(sort === 'price' ? (a, b) => a.price - b.price : sort === '-price' ? (a, b) => b.price - a.price : (a, b) => b.score - a.score);
+  const own = all.filter((o) => o.brands[id] !== 'compativel').length;
+  const name = (BRANDS[id] || { name: $('#brandInput').value || id }).name;
+  $('#brandSummary').textContent = `${name}: ${own} produto(s) da marca e ${all.length - own} acessório(s) compatível(is) de terceiros encontrados · mostrando ${list.length}. Organizados por categoria.`;
+  const groups = new Map();
+  for (const o of list) { if (!groups.has(o.category)) groups.set(o.category, []); groups.get(o.category).push(o); }
+  out.replaceChildren(...(list.length ? [...groups.entries()].map(([c, items]) => {
+    const g = el('div', 'cat-group');
+    g.append(el('h4', '', `${(CATEGORY_BY_ID[c] || { name: c }).name} (${items.length})`));
+    const ul = el('ul', 'offers');
+    ul.replaceChildren(...items.slice(0, 60).map(offerCard));
+    g.append(ul);
+    return g;
+  }) : [el('p', 'empty', all.length ? 'Nenhum resultado com os filtros atuais.' : 'Nenhum resultado desta marca ainda. Clique em "Buscar marca".')]));
+}
+
+// ---------- Categoria ----------
+const catSel = $('#catSelect');
+catSel.replaceChildren(...CATEGORIES.filter((c) => c.ml).map((c) => { const o = el('option', '', c.name); o.value = c.id; return o; }));
+$('#catSearch').addEventListener('click', async () => {
+  currentCategory = catSel.value;
+  const r = await chrome.runtime.sendMessage({ type: 'job:start', kind: 'categoria', category: currentCategory });
+  if (r && r.busy) showBox('#catStatus', 'Já existe uma varredura em andamento. Aguarde terminar.', true);
+  renderCategoryMode();
+});
+['#cSort', '#cLabel', '#catSelect'].forEach((x) => $(x).addEventListener('change', () => { currentCategory = catSel.value; renderCategoryMode(); }));
+function renderCategoryMode() {
+  const c = currentCategory || catSel.value;
+  const list = scored.filter((o) => o.category === c && labelOk(o, $('#cLabel').value));
+  list.sort($('#cSort').value === 'price' ? (a, b) => a.price - b.price : (a, b) => b.score - a.score);
+  $('#catSummary').textContent = `${(CATEGORY_BY_ID[c] || {}).name}: ${list.length} oferta(s).`;
+  $('#catResults').replaceChildren(...(list.length ? list.slice(0, 120).map(offerCard) : [el('li', 'empty', 'Nenhuma oferta desta categoria ainda.')]));
+}
+
+// ---------- Relatório de classificação (dados reais armazenados) ----------
+let lastReport = null;
+$('#reportBtn').addEventListener('click', async () => {
+  const r = await store.getRadar();
+  lastReport = classificationReport(r.offers, r.prices, Date.now(), weights);
+  renderReport(lastReport);
+  $('#reportCopy').hidden = false;
+});
+$('#reportCopy').addEventListener('click', (ev) => copy(JSON.stringify({ radarDeOfertas: chrome.runtime.getManifest().version, relatorio: lastReport }, null, 2), ev.target, 'Copiado ✓'));
+function table(rows, head) {
+  const t = el('table');
+  if (head) { const tr = el('tr'); head.forEach((h) => tr.append(el('th', '', h))); t.append(tr); }
+  for (const r of rows) { const tr = el('tr'); r.forEach((v) => tr.append(el('td', '', String(v)))); t.append(tr); }
+  return t;
+}
+function renderReport(rep) {
+  const box = $('#reportOut');
+  if (!rep.total) { box.replaceChildren(el('p', 'muted', 'Nenhuma oferta armazenada ainda. Rode o radar primeiro.')); return; }
+  const n = rep.novo.notas, a = rep.antigo.notas;
+  box.replaceChildren(
+    el('p', '', `${rep.total} ofertas armazenadas (dados reais deste navegador).`),
+    table([['Mínima', a.min, n.min], ['Máxima', a.max, n.max], ['Média', a.media, n.media], ['Mediana', a.mediana, n.mediana]], ['Nota', 'v0.5.1 (antiga)', 'v0.6.0 (nova)']),
+    table(Object.keys(rep.antigo.faixas).map((k) => [k, rep.antigo.faixas[k], rep.novo.faixas[k]]), ['Faixa de nota', 'antiga', 'nova']),
+    table(Object.entries(rep.antigo.classes), ['Classe antiga', 'Ofertas']),
+    table(Object.entries(rep.novo.classes), ['Classe nova', 'Ofertas']),
+    table(Object.entries(rep.novo.descontoReal), ['Desconto real (A)', 'Ofertas']),
+    table(Object.entries(rep.penalidades), ['Critério que penaliza', 'Ofertas afetadas']),
+    table(Object.entries(rep.impactoDoHistorico), ['Impacto do histórico', 'Valor'])
+  );
+}
+
+// Modo inicial: "Produto" (preserva a busca manual existente)
+setMode('produto');
 
 // Aba ativa no carregamento (app.js pode ter trocado de aba antes deste módulo carregar).
 const active = document.querySelector('.tabs button.active');

@@ -125,3 +125,45 @@ export function assessPrice(o, hist, peers) {
 export function fmt(n) {
   return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+// ---------- v0.6: indicador A — DESCONTO REAL (evidências de redução de preço) ----------
+// Níveis, do mais forte ao mais fraco (cada um com evidência explícita; nada é inventado):
+//   comprovado   preço ≥ 3% abaixo da média OBSERVADA do próprio anúncio (histórico ≥ 2 dias)
+//   corroborado  há "de/por" e o preço "de" é compatível com o que ≥ 3 anúncios EQUIVALENTES
+//                cobram (≤ 125% da mediana), e o preço atual está ≥ 5% abaixo dessa mediana
+//   campanha     "de/por" ≥ 15% numa página OFICIAL de ofertas do ML, com selo do ML (oferta do dia/
+//                relâmpago) ou loja oficial — evidência da plataforma, não verificada pelo Radar
+//   anunciado    só o "de/por" do vendedor (sem confirmação)
+//   artificial   "de" contraditório (nunca observado / muito acima dos equivalentes)
+export const DISCOUNT_TEXT = {
+  comprovado: 'Desconto comprovado',
+  corroborado: 'Desconto confirmado por equivalentes',
+  campanha: 'Desconto em campanha oficial do ML',
+  anunciado: 'Desconto só anunciado',
+  artificial: 'Desconto artificial',
+  nenhum: 'Sem desconto'
+};
+
+/**
+ * @param o oferta (price, originalPrice, badges, officialStore, sources)
+ * @param pa resultado de assessPrice (sinais e comparações)
+ * @param peers peerStats dos equivalentes
+ */
+export function assessDiscount(o, pa, peers) {
+  const claimed = pa.claimedPct; // %
+  if (pa.signals.includes('desconto-artificial')) return { level: 'artificial', text: DISCOUNT_TEXT.artificial, pct: null, value: 0, evidence: 'preço "de" contraditório' };
+  if (pa.provenPct != null && pa.signals.includes('desconto-comprovado')) {
+    return { level: 'comprovado', text: DISCOUNT_TEXT.comprovado, pct: pa.provenPct, value: Math.round(50 + Math.min(50, pa.provenPct * 2.5)), evidence: `média observada R$ ${fmt(pa.histAvg)}` };
+  }
+  if (claimed != null && claimed >= 10 && peers && peers.n >= 3 && peers.median && o.originalPrice <= peers.median * 1.25 && o.price <= peers.median * 0.95) {
+    const pct = Math.min(claimed, (1 - o.price / peers.median) * 100);
+    return { level: 'corroborado', text: DISCOUNT_TEXT.corroborado, pct, value: Math.round(35 + Math.min(40, pct * 1.6)), evidence: `${peers.n} equivalentes custam R$ ${fmt(peers.median)} (mediana)` };
+  }
+  const officialSource = (o.sources || []).some((s) => /^(ofertas|cat-)/.test(s));
+  const mlBadge = (o.badges || []).some((b) => /DIA|REL[AÂ]MPAGO/.test(b));
+  if (claimed != null && claimed >= 15 && officialSource && (mlBadge || o.officialStore) && !pa.signals.includes('acima-do-mercado')) {
+    return { level: 'campanha', text: DISCOUNT_TEXT.campanha, pct: claimed, value: Math.round(20 + Math.min(30, claimed * 0.6)), evidence: mlBadge ? 'selo do ML na página oficial de ofertas' : 'loja oficial na página oficial de ofertas' };
+  }
+  if (claimed != null && claimed >= 5) return { level: 'anunciado', text: DISCOUNT_TEXT.anunciado, pct: claimed, value: Math.round(Math.min(20, claimed * 0.4)), evidence: 'só o vendedor informa' };
+  return { level: 'nenhum', text: DISCOUNT_TEXT.nenhum, pct: null, value: 0, evidence: null };
+}

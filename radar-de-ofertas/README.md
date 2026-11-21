@@ -1,4 +1,4 @@
-# Radar de Ofertas — caçador automático de promoções (v0.5.1)
+# Radar de Ofertas — caçador automático de promoções (v0.6.0)
 
 Extensão do Google Chrome (Manifest V3, JavaScript puro, sem backend e sem serviços pagos) que **descobre automaticamente** ofertas no Mercado Livre por categoria, registra os preços observados, **pontua as oportunidades** e gera um texto pronto para divulgar em grupos de promoções.
 
@@ -94,27 +94,75 @@ Usa só referências **observadas**: a mediana dos equivalentes encontrados e a 
 | **Oportunidade não confirmada** | Há desconto anunciado, mas nenhuma referência para confirmar. |
 | **Acima do mercado** | ≥ 15% acima da mediana dos equivalentes. |
 
-### 5.3 Pontuação 0–100 (pesos configuráveis)
-A nota é a média ponderada de 6 subnotas. Os pesos ficam em **Radar automático → Pesos da pontuação** e podem ser restaurados ao padrão.
+### 5.3 Dois indicadores (v0.6)
+- **A) Desconto real**: evidência de **redução** de preço, do nível mais forte para o mais fraco:
 
-| Subnota | Peso padrão | Como é calculada |
+| Nível | Evidência | Nota A |
 |---|---|---|
-| Atratividade do preço | 35 | §5.2 (0 se não houver referência ou se for suspeita) |
-| Desconto comprovado | 30 | Proporcional ao desconto comprovado (25% ou mais = máximo); 0 sem histórico |
-| Desconto anunciado | 10 | Proporcional ao % anunciado (50% ou mais = máximo); 0 se for artificial |
-| Vendedor | 10 | Base + loja oficial + avaliação do produto |
-| Frete | 8 | Grátis = 100; pago e informado = 50; desconhecido = 20 |
-| Condição | 7 | Novo = 100; usado/recondicionado = 0 |
+| **Comprovado** | Preço ≥ 3% abaixo da média **observada** do próprio anúncio (histórico ≥ 2 dias) | 50–100 |
+| **Confirmado por equivalentes** | Há "de/por"; o "de" é ≤ 125% da mediana de ≥ 3 anúncios equivalentes; e o preço está ≥ 5% abaixo dessa mediana | 35–75 |
+| **Campanha oficial do ML** | "De/por" ≥ 15% numa página **oficial de ofertas** do ML, com selo do ML (oferta do dia/relâmpago) ou loja oficial. É a evidência da plataforma, **não** verificada pelo Radar | 20–50 |
+| **Só anunciado** | Apenas o "de/por" do vendedor | 0–20 |
+| **Artificial** | "De" contraditório (nunca observado ou muito acima dos equivalentes) | 0 |
 
-Ofertas suspeitas têm nota máxima de 30. Cada card mostra a nota, as subnotas de preço e de comprovação e o motivo de cada sinal em **Por quê?**.
+- **B) Atratividade do preço**: preço atual vs. anúncios **equivalentes** e vs. o histórico do anúncio (§5.2). Sem referência fica "sem referência".
 
-### 5.4 Classificação de promoção (rótulo)
-| Rótulo | Regra |
+### 5.4 Cinco classes (v0.6)
+| Classe | Regra (qualquer uma) |
 |---|---|
-| **Excelente oportunidade** | **Desconto comprovado ≥ 10%** e preço não acima do mercado. |
-| **Boa oportunidade** | Desconto comprovado ≥ 3%, **ou** desconto anunciado ≥ 20% coerente e não acima do mercado. |
-| **Sem promoção confirmada** | Sem desconto comprovado ou anunciado coerente. **Um produto barato sem desconto fica aqui**, e o preço baixo aparece no sinal de preço. |
-| **Desconto suspeito** | Desconto artificial ou preço anômalo. Nenhum desconto é exibido ou divulgado. |
+| **Excelente oportunidade** | Desconto comprovado ≥ 10% (e não acima do mercado) · preço ≥ 25% abaixo da mediana de **≥ 5** equivalentes · desconto confirmado por **≥ 4** equivalentes ≥ 20% |
+| **Boa oportunidade** | Desconto comprovado ≥ 3% · desconto confirmado por equivalentes ≥ 10% · preço ≥ 25% abaixo de 4 equivalentes · campanha oficial do ML ≥ 20% sem contradição |
+| **Preço competitivo** | Preço ≥ 8% abaixo da mediana de ≥ 3 equivalentes, sem desconto confirmado |
+| **Preço regular** | O resto, incluindo desconto só anunciado sem nada que o confirme |
+| **Oferta suspeita** | Desconto artificial ou preço > 60% abaixo de equivalentes. Nenhum desconto é exibido |
+
+Um produto pode ser **excelente sem histórico** quando há evidência forte de preço excepcional (5 ou mais equivalentes). Cada card mostra a classe, a evidência usada ("Classe: … — base"), o nível do desconto real (A) e a atratividade (B). Nenhum preço de referência é inventado.
+
+**Pontuação 0–100** = média ponderada de desconto real (35), atratividade (35), vendedor (12), frete (10) e condição (8). Os pesos são configuráveis.
+
+### 5.5 Por que a v0.5.1 não classificava nenhuma oferta como boa/excelente
+- "Excelente" exigia histórico de 2 dias ou mais, o que é impossível na primeira varredura.
+- "Boa" pelo desconto anunciado exigia 3 ou mais equivalentes ou histórico, mas páginas de ofertas trazem produtos **diferentes entre si**.
+- Preço excepcional nunca virava classe.
+- As subnotas de comprovação (30) e de preço (35) ficavam em 0 na maioria das ofertas, concentrando as notas entre 15 e 35.
+
+A v0.6 **não baixou limiares**: acrescentou evidências legítimas (equivalentes que confirmam o "de" e campanha oficial do ML, rotulada como evidência fraca) e uma classe para preço competitivo. Para ver os números com os **seus** dados: **Histórico → Relatório de classificação → Gerar relatório**. Ele mostra a distribuição das notas (mín./máx./média/mediana), as classes antigas e novas, os critérios que penalizam e o impacto do histórico.
+
+## 5.6 Busca por marca, produto e categoria (v0.6)
+Em **Busca manual** há três modalidades: **[Produto] [Marca] [Categoria]**. A busca por produto é a mesma de antes.
+
+**Marca**
+- **Marcas cadastradas**, com as linhas de produto pesquisadas:
+
+| Marca | Linhas pesquisadas |
+|---|---|
+| Nike | tênis, camiseta, bermuda, mochila, boné, jaqueta, chuteira, meia |
+| Adidas | tênis, camiseta, calça, mochila, chuteira, jaqueta, bola |
+| Samsung | celular, smart tv, tablet, geladeira, lava e seca, fone, monitor, smartwatch |
+| JBL | fone, caixa de som, soundbar, headset, partybox |
+| Xiaomi | celular, smartwatch, fone, aspirador robô, mi band, tv box, patinete |
+| Mondial | ventilador, air fryer, liquidificador, batedeira, cafeteira, ferro, chaleira |
+| Motorola | celular, moto g, moto edge, fone, carregador |
+| Philips | air fryer, barbeador, aparador, secador, fone, liquidificador, monitor, lâmpada |
+| Electrolux | geladeira, fogão, micro-ondas, lava e seca, aspirador, purificador, air fryer |
+| LG | smart tv, geladeira, lava e seca, micro-ondas, monitor, ar condicionado, soundbar |
+
+  Também estão cadastradas Apple, Lenovo, Britânia, Arno e Tramontina. A lista fica em `lib/brands.js` e é **expansível**.
+- **Marca digitada que não está na lista:** o Radar pesquisa a marca, **descobre as linhas de produto** pelos títulos encontrados e pesquisa essas linhas. Ao favoritar, ela entra em "Minhas marcas".
+- **Consultas:** a marca sozinha + uma por linha de produto, na página de busca do ML. A **página 2** (formato `_Desde_N`) só é pedida se a página 1 veio cheia (40 ou mais anúncios) e com anúncios novos. Há 3 s entre consultas.
+- **Verificação de cada anúncio:**
+  - **marca** ou **loja oficial**: produto da marca;
+  - **compatível**: acessório de terceiros "para" a marca, mostrado só se você marcar a opção;
+  - **outra marca**: imitação, "tipo X", "similar" ou outra fabricante citada antes; é descartado;
+  - **ausente**: não cita a marca; é descartado. Exemplo: "Capacete para moto" não é Motorola.
+- **Resultados:** sem duplicados, **organizados por categoria**, com filtros de categoria, preço e classe e ordenação por pontuação ou preço.
+- **Marcas favoritas**, **Minhas marcas** e **Histórico de buscas por marca**, com lidos, da marca, compatíveis, descartados e categorias.
+- **Monitorar marca:** as marcas marcadas entram em toda varredura do radar, manual e periódica, com no máximo 3 consultas por marca. Os achados aparecem em **Achados de marcas monitoradas** no painel.
+
+**Categoria**: lê até 3 páginas oficiais de ofertas da categoria escolhida.
+
+### Painel (v0.6)
+O painel destaca **Descontos comprovados**, **Preços excepcionais**, **Boas oportunidades** e **Achados de marcas monitoradas**, seguidos de **todas as ofertas relevantes**, isto é, todas as não suspeitas. O filtro de classe começa em "Qualquer classe".
 
 ## 6. Texto "Copiar oferta"
 ```
@@ -169,6 +217,7 @@ npm test                 # testes unitários: preços, equivalência, pontuaçã
 npm run test:e2e:radar   # radar completo no Chromium
 npm run test:e2e         # busca manual
 npm run test:e2e:tab     # leitura pela aba (busca manual)
+npm run test:e2e:brands  # v0.6: busca das 10 marcas, filtros, favoritos, histórico, monitoramento, relatório
 npm run test:e2e:loading # v0.5.1: carregamento dinâmico (tela de carregamento, atrasos, nunca carrega, bloqueio, sem resultados, verificação, layout desconhecido, estado Nordic)
 ```
 Os testes e2e usam **rede simulada com páginas sintéticas** (servidor HTTPS local). **Eles não provam que a coleta funciona no site real.**
@@ -202,7 +251,10 @@ lib/categories.js     categorias, palavras-chave e fontes
 lib/discovery.js      motor de descoberta (fontes, leitura direta/aba, limites, pausas)
 lib/product.js        ficha do produto (marca, modelo, versão, capacidade, tamanho, quantidade, condição, acessório) e equivalência
 lib/pricing.js        atratividade do preço e sinais (comprovado, anunciado, competitivo, excepcional, artificial, anômalo, não confirmada)
-lib/scoring.js        pontuação com pesos configuráveis, rótulos e texto de divulgação
+lib/scoring.js        5 classes, dois indicadores (desconto real × atratividade), pesos e texto de divulgação
+lib/scoring-v05.js    classificação antiga (só para o relatório comparativo)
+lib/report.js         relatório de classificação sobre os dados armazenados
+lib/brands.js         marcas cadastradas, consultas por linha de produto, verificação de marca
 lib/ml-parser.js      leitor de anúncios (json/dom/links) + diagnóstico; também injetado nas abas
 lib/storage.js        ofertas, histórico, favoritos, varreduras, configurações
 lib/analyzer.js       equivalência e classificação da busca manual

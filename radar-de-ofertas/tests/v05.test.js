@@ -31,16 +31,18 @@ const hist = (avg, min, max, days, count = days) => ({ avg, min, max, days, coun
 const peers = (...p) => peerStats(p);
 
 // ---------- 1) Produtos baratos sem desconto anunciado ----------
-test('barato sem desconto: sinal de preço, mas NÃO é promoção', () => {
+test('barato sem desconto: classe pela ATRATIVIDADE (B); desconto real (A) = nenhum', () => {
+  // v0.6: 38% abaixo de 5 equivalentes = evidência forte → excelente, sem afirmar desconto
   const r = scoreOffer(offer('Air Fryer Mondial 4L', 249), null, peers(399, 410, 389, 420, 405));
-  assert.equal(r.label, 'regular');
-  assert.equal(r.labelText, 'Sem promoção confirmada');
+  assert.equal(r.label, 'excelente');
   assert.equal(r.discountKind, null);
+  assert.equal(r.realDiscount.level, 'nenhum');
   assert.equal(r.priceSignal, 'preco-excepcional');
   assert.ok(r.attractiveness >= 80, String(r.attractiveness));
   const c = scoreOffer(offer('Air Fryer Mondial 4L', 360), null, peers(399, 410, 389, 420, 405));
   assert.equal(c.priceSignal, 'preco-competitivo');
-  assert.equal(c.label, 'regular');
+  assert.equal(c.label, 'competitivo');
+  assert.equal(c.labelText, 'Preço competitivo');
 });
 
 // ---------- 2) Descontos artificiais ----------
@@ -56,11 +58,14 @@ test('desconto artificial: "de" inflado frente ao que equivalentes custam', () =
   assert.equal(r.priceSignal, 'desconto-artificial');
   assert.equal(r.label, 'suspeito');
 });
-test('desconto anunciado coerente continua "anunciado" (não comprovado)', () => {
+test('desconto anunciado com "de" compatível com equivalentes → corroborado (não "comprovado")', () => {
   const r = scoreOffer(offer('Fone JBL Tune 520BT', 199, { originalPrice: 299 }), null, peers(259, 269, 279, 249));
-  assert.equal(r.discountKind, 'anunciado');
+  assert.equal(r.discountKind, 'corroborado');
+  assert.notEqual(r.discountKind, 'comprovado');
   assert.ok(r.priceInfo.signals.includes('desconto-anunciado'));
-  assert.equal(r.label, 'boa');
+  assert.equal(r.label, 'excelente'); // 25% abaixo de 4 equivalentes, "de" plausível
+  // "de" muito acima do que equivalentes custam continua artificial
+  assert.equal(scoreOffer(offer('Fone JBL Tune 520BT', 249, { originalPrice: 599 }), null, peers(239, 249, 259, 245)).label, 'suspeito');
 });
 test('desconto anunciado sem nenhuma referência: oportunidade NÃO confirmada', () => {
   const r = scoreOffer(offer('Produto Raro XZ-9', 100, { originalPrice: 150 }), null, null);
@@ -124,7 +129,8 @@ test('marca, modelo, versão, capacidade, tamanho e quantidade separam produtos'
     assert.equal(g.get('1'), g.get('2'), `${a} | ${b}`);
   }
   const p = parseProduct('Samsung Galaxy S25 Ultra 256GB 12GB RAM Titânio');
-  assert.deepEqual([p.brand, p.model.join(' '), p.variant.join(' '), p.capacity, p.ram], ['samsung', 'galaxy s25', 'ultra', 256, 12]);
+  // v0.6: com código de modelo ("s25"), o nome da linha ("galaxy") não entra na ficha
+  assert.deepEqual([p.brand, p.model.join(' '), p.variant.join(' '), p.capacity, p.ram], ['samsung', 's25', 'ultra', 256, 12]);
   assert.deepEqual(parseProduct('Liquidificador Arno 1,5L 550W').size, { l: 1.5, w: 550 });
   assert.deepEqual(parseProduct('Samsung Galaxy S25 5G 256GB').size, {}); // 5G é rede, não peso
   assert.deepEqual(parseProduct('Whey Protein Growth 900g').size, { g: 900 });
@@ -148,8 +154,9 @@ test('excepcional exige ≥ 4 equivalentes; com 3 só "competitivo"', () => {
 test('sem histórico: nunca "comprovado" nem "excelente"', () => {
   const r = scoreOffer(offer('Notebook Dell Inspiron 15 3520', 2999, { originalPrice: 3999, officialStore: true }), null, peers(3499, 3599, 3399, 3550, 3600));
   assert.notEqual(r.discountKind, 'comprovado');
-  assert.notEqual(r.label, 'excelente');
-  assert.equal(r.subscores.comprovacao, 0);
+  assert.equal(r.discountKind, 'corroborado'); // "de" 3999 compatível com equivalentes (~3550)
+  assert.equal(r.label, 'boa');                // 15% abaixo dos equivalentes
+  assert.ok(r.subscores.desconto < 75);        // corroborado vale menos que comprovado
 });
 
 // ---------- 8) Produtos com histórico de vários dias ----------
@@ -157,7 +164,7 @@ test('histórico de vários dias: desconto comprovado e excelente', () => {
   const r = scoreOffer(offer('Smart TV LG 55UR8750', 2399), hist(2899, 2799, 2999, 5), peers(2799, 2899, 2850, 2950));
   assert.equal(r.discountKind, 'comprovado');
   assert.equal(r.label, 'excelente');
-  assert.ok(r.subscores.comprovacao > 0);
+  assert.ok(r.subscores.desconto >= 75);
   assert.equal(Math.round(r.previousPrice), 2899);
   assert.match(shareText({ ...offer('TV', 2399), ...r }), /17% abaixo do preço médio que acompanhamos/);
 });
@@ -196,12 +203,12 @@ test('pesos configuráveis mudam a nota; inválidos voltam ao padrão', () => {
   const o = offer('Fone JBL Tune 520BT', 199, { originalPrice: 299, officialStore: true });
   const p = peers(259, 269, 279, 249, 265);
   const a = scoreOffer(o, null, p, DEFAULT_WEIGHTS).score;
-  const b = scoreOffer(o, null, p, { ...DEFAULT_WEIGHTS, preco: 0, comprovacao: 0, anunciado: 100 }).score;
+  const b = scoreOffer(o, null, p, { ...DEFAULT_WEIGHTS, preco: 0, desconto: 100 }).score;
   assert.notEqual(a, b);
   assert.deepEqual(normalizeWeights({ preco: -5, frete: 'x', vendedor: 500 }), DEFAULT_WEIGHTS);
-  // separação dos eixos: preço atrativo não gera comprovação
-  const r = scoreOffer(o, null, p);
-  assert.ok(r.subscores.preco > 0 && r.subscores.comprovacao === 0);
+  // separação dos eixos: preço atrativo sem "de/por" não gera desconto real
+  const r = scoreOffer(offer('Fone JBL Tune 520BT', 199), null, p);
+  assert.ok(r.subscores.preco > 0 && r.subscores.desconto === 0);
 });
 
 // ---------- Fontes ----------

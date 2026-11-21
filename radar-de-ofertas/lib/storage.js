@@ -81,7 +81,7 @@ export async function toggleWatch(item) {
 }
 
 export async function clearAll() {
-  await area().remove(['searches', 'prices', 'watch', 'offers', 'scans', 'radarState', 'sourceStats', 'lastPrune', 'backoff']);
+  await area().remove(['searches', 'prices', 'watch', 'offers', 'scans', 'radarState', 'sourceStats', 'lastPrune', 'backoff', 'brandSearches']);
 }
 
 export async function bytesInUse() {
@@ -89,7 +89,40 @@ export async function bytesInUse() {
 }
 
 export async function exportJson() {
-  return JSON.stringify(await getAll(), null, 2);
+  // v0.6: inclui ofertas, varreduras e dados de marcas (para análise da classificação com dados reais)
+  const all = await area().get(['searches', 'prices', 'watch', 'offers', 'scans', 'sourceStats', 'brandFavs', 'customBrands', 'brandSearches', 'settings']);
+  return JSON.stringify(all, null, 2);
+}
+
+// ---------- Marcas (v0.6) ----------
+const BRAND_RANK = { compativel: 1, marca: 2, oficial: 3 };
+export function mergeBrands(a = {}, b = {}) {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b || {})) if (!out[k] || (BRAND_RANK[v] || 0) > (BRAND_RANK[out[k]] || 0)) out[k] = v;
+  return out;
+}
+// brandFavs: [id]   customBrands: { id: { name, aliases, terms } }   brandSearches: [{ t, brand, name, ... }]
+export async function getBrandData() {
+  const { brandFavs = [], customBrands = {}, brandSearches = [] } = await area().get(['brandFavs', 'customBrands', 'brandSearches']);
+  return { brandFavs, customBrands, brandSearches };
+}
+export async function toggleBrandFav(id) {
+  const { brandFavs = [] } = await area().get('brandFavs');
+  const i = brandFavs.indexOf(id);
+  if (i >= 0) brandFavs.splice(i, 1); else brandFavs.push(id);
+  await area().set({ brandFavs });
+  return i < 0;
+}
+export async function saveCustomBrand(id, brand) {
+  const { customBrands = {} } = await area().get('customBrands');
+  customBrands[id] = { name: brand.name, aliases: (brand.aliases || []).filter((a) => typeof a === 'string'), phrase: brand.phrase || '', terms: brand.terms || [] };
+  await area().set({ customBrands });
+}
+export async function addBrandSearch(rec) {
+  const { brandSearches = [] } = await area().get('brandSearches');
+  brandSearches.unshift(rec);
+  if (brandSearches.length > 100) brandSearches.length = 100;
+  await area().set({ brandSearches });
 }
 
 // ---------- Radar automático ----------
@@ -98,7 +131,7 @@ export async function exportJson() {
 // settings: { interval, pages, categories, allowTabManual, allowTabAuto, notify, minNotifyLabel }
 // radarState: { running, startedAt, current, done, total, message, needsUser, tabId }
 
-export const DEFAULT_SETTINGS = { interval: 0, pages: 1, categories: [], allowTabManual: true, allowTabAuto: false, notify: true, weights: null };
+export const DEFAULT_SETTINGS = { interval: 0, pages: 1, categories: [], allowTabManual: true, allowTabAuto: false, notify: true, weights: null, monitorBrands: [] };
 const OFFER_TTL = 3 * 24 * 60 * 60 * 1000; // ofertas não vistas há 3 dias saem do painel (o histórico de preços fica)
 const MAX_SCANS = 50;
 
@@ -140,6 +173,7 @@ export async function mergeOffers(items, source, now = Date.now()) {
         categoryFromSource: !!(source.category || prev.categoryFromSource),
         image: it.image || prev.image,
         sources: [...new Set([...(prev.sources || []), source.id])],
+        brands: mergeBrands(prev.brands, it.brands), // marca → relação mais forte (oficial > marca > compativel)
         firstSeen: prev.firstSeen,
         lastSeen: now
       };

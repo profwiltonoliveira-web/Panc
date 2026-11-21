@@ -9,6 +9,7 @@ import { tokens } from './analyzer.js';
 // Marcas comuns no Mercado Livre Brasil (lista aberta; marcas desconhecidas ficam sem marca).
 const BRANDS = ['apple', 'samsung', 'motorola', 'xiaomi', 'redmi', 'poco', 'realme', 'lg', 'sony', 'philips', 'jbl', 'tcl', 'aoc', 'philco', 'britania', 'mondial', 'electrolux', 'brastemp', 'consul', 'arno', 'oster', 'cadence', 'wap', 'karcher', 'multilaser', 'lenovo', 'dell', 'acer', 'asus', 'hp', 'positivo', 'vaio', 'intelbras', 'logitech', 'redragon', 'hyperx', 'razer', 'kingston', 'sandisk', 'seagate', 'corsair', 'nintendo', 'microsoft', 'bosch', 'makita', 'dewalt', 'vonder', 'tramontina', 'stanley', 'nike', 'adidas', 'puma', 'olympikus', 'mizuno', 'fila', 'asics', 'vans', 'converse', 'havaianas', 'natura', 'boticario', 'loreal', 'nivea', 'wella', 'eudora', 'avon', 'lego', 'mattel', 'hasbro', 'barbie', 'amazon', 'kindle', 'blackdecker', 'tplink', 'westerndigital', 'hotwheels', 'dolcegusto', 'trescoracoes', 'gree', 'midea', 'springer', 'fischer', 'panasonic', 'jvc', 'pioneer', 'edifier', 'qcy', 'haylou', 'amazfit', 'garmin', 'lenoxx', 'gopro', 'canon', 'nikon', 'fujifilm', 'dji', 'growth', 'integralmedica', 'probiotica', 'caloi', 'oxer', 'atrio', 'tissot', 'casio', 'orient', 'technos', 'invicta', 'oakley', 'rayban', 'nespresso', 'kitchenaid', 'cuisinart', 'rinnai', 'lorenzetti', 'fiat', 'volkswagen', 'chevrolet', 'pirelli', 'michelin', 'goodyear', 'bridgestone', 'continental'];
 const BRAND_SET = new Set(BRANDS);
+export const BRAND_LIST = BRANDS;
 const BRAND_ALIASES = { 'black+decker': 'blackdecker', 'black & decker': 'blackdecker', 'black decker': 'blackdecker', 'tp-link': 'tplink', 'tp link': 'tplink', "l'oreal": 'loreal', 'l oreal': 'loreal', 'o boticario': 'boticario', 'western digital': 'westerndigital', 'ray-ban': 'rayban', 'ray ban': 'rayban', 'hot wheels': 'hotwheels', 'dolce gusto': 'dolcegusto', 'tres coracoes': 'trescoracoes' };
 
 // Famílias/linhas que fazem parte do modelo ("galaxy s25", "redmi note 13", "moto g54").
@@ -96,6 +97,10 @@ export function parseProduct(title, condition = null) {
   });
   if (condition === 'usado' || condition === 'recondicionado' || /\b(usado|seminovo|recondicionado|vitrine)\b/.test(joined)) condition = condition || 'usado';
 
+  // Com código de modelo (letras+números: "un50du7700", "s25", "g54", "520bt"), o código basta:
+  // nomes de linha ("crystal", "galaxy") e números soltos (tamanho repetido) só atrapalham a equivalência.
+  const codes = model.filter((t) => /^[a-z]+\d+[a-z\d]*$|^\d+[a-z]+[a-z\d]*$/.test(t) && t.length >= 3);
+  if (codes.length) model.splice(0, model.length, ...codes);
   const hasModel = model.some((t) => /\d/.test(t));
   const confident = !!(brand && hasModel);
   const parts = [
