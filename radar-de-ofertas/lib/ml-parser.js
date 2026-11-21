@@ -88,6 +88,13 @@
     const title = clean(o.title);
     if (!link || !title || !(o.price > 0)) return null;
     let originalPrice = o.originalPrice > o.price ? o.originalPrice : null;
+    let originalPriceFrom = originalPrice ? 'anuncio' : null;
+    // Sem preço "de" mas com o selo "X% OFF" exibido pelo ML: o "de" é o que o próprio ML mostra
+    // (preço / (1 − X%)), marcado como derivado do selo — não é um valor inventado pelo Radar.
+    if (!originalPrice && o.discountLabelPct > 0 && o.discountLabelPct < 95) {
+      originalPrice = Math.round((o.price / (1 - o.discountLabelPct / 100)) * 100) / 100;
+      originalPriceFrom = 'selo-off';
+    }
     return {
       id: idFromUrl(link) || titleKey(title),
       title,
@@ -104,8 +111,16 @@
       badges: (o.badges || []).map(clean).filter(Boolean).slice(0, 4),
       rating: o.rating > 0 && o.rating <= 5 ? Math.round(o.rating * 10) / 10 : null,
       reviews: o.reviews > 0 ? Math.round(o.reviews) : null,
-      installments: null
+      installments: null,
+      originalPriceFrom,
+      parsedBy: o.parsedBy || null
     };
+  }
+
+  /** "35% OFF" → 35 (selo de desconto exibido pelo ML) */
+  function offPct(text) {
+    const m = String(text || '').match(/(\d{1,2})\s*%\s*off/i);
+    return m ? Number(m[1]) : null;
   }
 
   // Selos relevantes para promoções (texto curto exibido pelo próprio ML no card).
@@ -161,7 +176,9 @@
     const title = textOf(comp('title') && (comp('title').text != null ? comp('title').text : comp('title')));
     const priceC = comp('price') || {};
     const cur = findDeep(priceC.current_price || priceC, (o) => typeof o.value === 'number');
-    const prev = priceC.previous_price ? findDeep(priceC.previous_price, (o) => typeof o.value === 'number') : null;
+    const prevSrc = priceC.previous_price || priceC.original_price || priceC.prev_price || priceC.regular_price || priceC.list_price || null;
+    const prev = prevSrc ? (typeof prevSrc === 'number' ? { value: prevSrc } : findDeep(prevSrc, (o) => typeof o.value === 'number' || typeof o.amount === 'number')) : null;
+    const discountLabelPct = offPct(textOf(priceC.discount_label) || textOf(priceC.discount) || textOf(comp('discount')));
     let link = md.url || '';
     if (link && !/^https?:/i.test(link)) link = 'https://' + link.replace(/^\/+/, '');
     if (link && md.url_params && !link.includes('?') && /^[?#]/.test(md.url_params)) link += md.url_params;
@@ -181,7 +198,9 @@
       title,
       link,
       price: cur ? cur.value : null,
-      originalPrice: prev ? prev.value : null,
+      originalPrice: prev ? (typeof prev.value === 'number' ? prev.value : prev.amount) : null,
+      discountLabelPct,
+      parsedBy: 'json',
       ...shippingFromText(shipText),
       condition: conditionFromText(extra),
       image,
@@ -256,6 +275,8 @@
               price, originalPrice: typeof o.original_price === 'number' ? o.original_price : (o.price && typeof o.price.original_price === 'number' ? o.price.original_price : null),
               ...(o.shipping && o.shipping.free_shipping ? { shipping: 0, freeShipping: true } : {}),
               condition: o.condition === 'used' ? 'usado' : null,
+              discountLabelPct: o.discount && typeof o.discount.rate === 'number' ? Math.round(o.discount.rate * (o.discount.rate <= 1 ? 100 : 1)) : null,
+              parsedBy: 'estado',
               image: o.thumbnail || (o.pictures && o.pictures[0] && o.pictures[0].url) || ''
             });
             if (item) { out.push(item); return; }
@@ -297,7 +318,8 @@
     const a = pick(card, ['a.poly-component__title', 'h3 a[href]', 'h2 a[href]', 'a.ui-search-item__group__element', 'a.ui-search-link', 'a.promotion-item__link-container']);
     const titleEl = pick(card, ['.poly-component__title', '.ui-search-item__title', '.promotion-item__title', 'h3', 'h2']);
     const currentBox = pick(card, ['.poly-price__current', '.ui-search-price__second-line', '.ui-search-price--size-medium', '.andes-money-amount-combo__main-container']);
-    const prevEl = pick(card, ['s.andes-money-amount', '.andes-money-amount--previous', '.ui-search-price__original-value']);
+    const prevEl = pick(card, ['s.andes-money-amount', '.andes-money-amount--previous', '.ui-search-price__original-value', '[aria-label^="Antes"]', 's']);
+    const offEl = pick(card, ['.andes-money-amount__discount', '.poly-price__disc_label', '.ui-search-price__discount', '.poly-price__discount']);
     const img = pick(card, ['img.poly-component__picture', 'img']);
     const sellerEl = pick(card, ['.poly-component__seller', '.ui-search-official-store-label', '.promotion-item__seller']);
     const highlight = pick(card, ['.poly-component__highlight', '.ui-search-item__highlight-label', '.promotion-item__today-offer-text', '.promotion-item__lightning']);
@@ -313,6 +335,8 @@
       link: a && a.getAttribute('href'),
       price: readMoney(firstCurrentAmount(currentBox || card)),
       originalPrice: prevEl ? readMoney(prevEl) : null,
+      discountLabelPct: offPct(offEl ? offEl.textContent : text),
+      parsedBy: 'dom',
       ...shippingFromText(text),
       condition: conditionFromText(text),
       image: img ? (img.getAttribute('data-src') || img.getAttribute('src') || '') : '',
@@ -358,6 +382,8 @@
         link,
         price: readMoney(amount),
         originalPrice: prevEl ? readMoney(prevEl) : null,
+        discountLabelPct: offPct(text),
+        parsedBy: 'links',
         ...shippingFromText(text),
         condition: conditionFromText(text),
         image: img ? (img.getAttribute('data-src') || img.getAttribute('src') || '') : ''

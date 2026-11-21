@@ -5,6 +5,7 @@
 import { CATEGORIES, CATEGORY_BY_ID, GROUPS } from './lib/categories.js';
 import { SUGGESTIONS, resolveBrand, normalizeBrand, slug as brandSlug } from './lib/brands.js';
 import { classificationReport } from './lib/report.js';
+import { applyOfferFilters, signalCounts, sortOffers, labelOk, SIGNAL_OPTIONS } from './lib/filters.js';
 import { scoreAll, shareText, LABEL_RANK, cleanLink, fmt, DEFAULT_WEIGHTS, WEIGHT_LABELS, normalizeWeights } from './lib/scoring.js';
 import * as store from './lib/storage.js';
 
@@ -121,47 +122,28 @@ function fillCategorySelect() {
   sel.firstChild.value = '';
 }
 
+// Critérios atuais da aba "ofertas" (a lógica dos filtros fica em lib/filters.js).
+function currentFilters() {
+  return {
+    text: $('#oText').value, category: $('#oCat').value, min: $('#oMin').value, max: $('#oMax').value,
+    disc: $('#oDisc').value, proven: $('#oProven').checked, signal: $('#oSignal').value, free: $('#oFree').checked,
+    cond: $('#oCond').value, label: $('#oLabel').value, noAcc: $('#oAcc').checked,
+    group: view.group, groupOf: (c) => (CATEGORY_BY_ID[c] || CATEGORY_BY_ID.outros).group
+  };
+}
 function applyFilters(list) {
-  const text = $('#oText').value.trim().toLowerCase();
-  const cat = $('#oCat').value;
-  const min = Number($('#oMin').value) || 0;
-  const max = Number($('#oMax').value) || Infinity;
-  const disc = Number($('#oDisc').value) || 0;
-  const proven = $('#oProven').checked;
-  const free = $('#oFree').checked;
-  const cond = $('#oCond').value;
-  const lbl = $('#oLabel').value;
-  const noAcc = $('#oAcc').checked;
-  const signal = $('#oSignal').value;
-  let out = list.filter((o) => {
-    if (view.group && (CATEGORY_BY_ID[o.category] || CATEGORY_BY_ID.outros).group !== view.group) return false;
-    if (cat && o.category !== cat) return false;
-    if (text && !o.title.toLowerCase().includes(text)) return false;
-    if (o.price < min || o.price > max) return false;
-    if (disc && !(o.discountPct >= disc)) return false;
-    if (proven && o.discountKind !== 'comprovado') return false;
-    if (free && !o.freeShipping) return false;
-    if (cond === 'novo' && (o.condition === 'usado' || o.condition === 'recondicionado')) return false;
-    if (cond === 'usado' && !(o.condition === 'usado' || o.condition === 'recondicionado')) return false;
-    if (!labelOk(o, lbl)) return false;
-    if (noAcc && o.accessory) return false;
-    if (signal && !(o.priceInfo && o.priceInfo.signals.includes(signal))) return false;
-    return true;
-  });
-  const sort = $('#oSort').value;
-  if (sort === 'discount') out.sort((a, b) => (b.discountPct || 0) - (a.discountPct || 0));
-  else if (sort === 'price') out.sort((a, b) => a.price - b.price);
-  else if (sort === 'new') out.sort((a, b) => b.firstSeen - a.firstSeen);
-  else out.sort((a, b) => b.score - a.score);
-  return out;
+  return sortOffers(applyOfferFilters(list, currentFilters()), $('#oSort').value);
+}
+// Mostra em cada opção do filtro de sinal quantas ofertas ela traria (com os demais filtros).
+function updateSignalOptions(list) {
+  const { total, counts } = signalCounts(list, currentFilters());
+  const sel = $('#oSignal');
+  for (const opt of sel.options) {
+    const base = opt.dataset.base || (opt.dataset.base = opt.textContent.replace(/ \(\d+\)$/, ''));
+    opt.textContent = `${base} (${opt.value ? counts[opt.value] || 0 : total})`;
+  }
 }
 
-// Classe: "suspeito"/"regular" = exatamente; demais = essa classe ou melhor.
-function labelOk(o, lbl) {
-  if (!lbl) return true;
-  if (lbl === 'suspeito' || lbl === 'regular') return o.label === lbl;
-  return o.label !== 'suspeito' && LABEL_RANK[o.label] >= LABEL_RANK[lbl];
-}
 
 function offerCard(o) {
   const node = $('#offerTpl').content.firstElementChild.cloneNode(true);
@@ -235,6 +217,7 @@ function renderOffers() {
     const top = scored.filter((o) => o.label !== 'suspeito').sort((a, b) => b.score - a.score).slice(0, 60);
     $('#topOffers').replaceChildren(...(top.length ? top.map(offerCard) : [el('li', 'empty', 'Nenhuma oferta ainda. Clique em "Iniciar Radar".')]));
   } else if (view.name === 'ofertas') {
+    updateSignalOptions(scored);
     const list = applyFilters(scored);
     const shown = list.slice(0, 300);
     const groupName = view.group ? (GROUPS.find((g) => g.id === view.group) || {}).name : 'Todas as ofertas';
@@ -625,7 +608,11 @@ function renderReport(rep) {
     table(Object.entries(rep.novo.classes), ['Classe nova', 'Ofertas']),
     table(Object.entries(rep.novo.descontoReal), ['Desconto real (A)', 'Ofertas']),
     table(Object.entries(rep.penalidades), ['Critério que penaliza', 'Ofertas afetadas']),
-    table(Object.entries(rep.impactoDoHistorico), ['Impacto do histórico', 'Valor'])
+    table(Object.entries(rep.impactoDoHistorico), ['Impacto do histórico', 'Valor']),
+    table(Object.entries(rep.filtros.porSinal), ['Filtro "sinal de preço"', 'Ofertas (uma oferta pode ter vários sinais)']),
+    table(Object.entries(rep.filtros.sinalPrincipal), ['Sinal principal', 'Ofertas']),
+    table([['Sem sinal filtrável', rep.filtros.semSinalFiltravel], ['Sinal inválido', rep.filtros.sinalInvalido], ['Com preço "de" no card', rep.filtros.precoDe.anunciadoNoCard], ['Preço "de" derivado do selo % OFF', rep.filtros.precoDe.derivadoDoSeloOff], ['Sem preço "de"', rep.filtros.precoDe.ausente], ['Com ≥ 3 equivalentes', rep.filtros.comPeloMenos3Equivalentes]], ['Diagnóstico dos filtros', 'Ofertas']),
+    table(Object.entries(rep.filtros.lidoPor), ['Estratégia de leitura', 'Ofertas'])
   );
 }
 

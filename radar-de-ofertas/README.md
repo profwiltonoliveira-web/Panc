@@ -1,4 +1,4 @@
-# Radar de Ofertas — caçador automático de promoções (v0.6.1)
+# Radar de Ofertas — caçador automático de promoções (v0.6.2)
 
 Extensão do Google Chrome (Manifest V3, JavaScript puro, sem backend e sem serviços pagos) que **descobre automaticamente** ofertas no Mercado Livre por categoria, registra os preços observados, **pontua as oportunidades** e gera um texto pronto para divulgar em grupos de promoções.
 
@@ -153,6 +153,20 @@ Em **Busca manual** há três modalidades: **[Produto] [Marca] [Categoria]**. A 
 
 **Categoria**: lê até 3 páginas oficiais de ofertas da categoria escolhida.
 
+### Filtro "sinal de preço" (v0.6.2)
+- **Defeito corrigido:** na v0.6.1, o filtro só enxergava sinais *detectados*. Uma oferta sem preço "de", sem 3 ou mais equivalentes e sem histórico tinha a lista de sinais **vazia** e não aparecia em **nenhuma** opção; só em "Qualquer sinal de preço". O sintoma foi reproduzido com o código da v0.6.1.
+- **Agora toda oferta pertence a pelo menos um sinal**, porque o sinal principal também conta. Foram criadas as opções **"Preço na média"**, **"Sem referência de preço"** e **"Preço anômalo"**.
+- **Sinais múltiplos:** uma oferta pode estar em mais de uma opção. Exemplo: desconto comprovado e preço excepcional.
+- **Contagem por opção:** cada opção mostra quantas ofertas traz, considerando os demais filtros, e o número se atualiza sozinho a cada varredura.
+- **Chave ou rótulo:** o filtro aceita a chave interna ou o rótulo exibido, com normalização de acentos e de maiúsculas e minúsculas.
+- **Diagnóstico dos filtros**, em **Histórico → Relatório de classificação**. Ele mostra:
+  - quantas ofertas cada opção traz;
+  - quantas ficam sem sinal ou com sinal inválido;
+  - quantas têm preço "de" no card, quantas têm o preço "de" derivado do selo "% OFF" do ML e quantas não têm preço "de";
+  - quantas têm 3 ou mais equivalentes;
+  - qual estratégia de leitura (`json`/`estado`/`dom`/`links`) leu as ofertas.
+- **Extração do preço "de" mais robusta:** várias chaves no JSON, mais seletores na página e `aria-label="Antes…"`. Quando o card só mostra o selo "X% OFF", o preço "de" é calculado desse percentual **exibido pelo ML** e marcado como "derivado do selo".
+
 ### Painel (v0.6)
 O painel destaca **Descontos comprovados**, **Preços excepcionais**, **Boas oportunidades** e **Achados de marcas monitoradas**, seguidos de **todas as ofertas relevantes**, isto é, todas as não suspeitas. O filtro de classe começa em "Qualquer classe".
 
@@ -209,6 +223,7 @@ npm test                 # testes unitários: preços, equivalência, pontuaçã
 npm run test:e2e:radar   # radar completo no Chromium
 npm run test:e2e         # busca manual
 npm run test:e2e:tab     # leitura pela aba (busca manual)
+npm run test:e2e:filters # v0.6.2: cada filtro de sinal, contagens, combinações, atualização após varredura
 npm run test:e2e:brands  # v0.6: busca das 10 marcas, filtros, favoritos, histórico, monitoramento, relatório
 npm run test:e2e:loading # v0.5.1: carregamento dinâmico (tela de carregamento, atrasos, nunca carrega, bloqueio, sem resultados, verificação, layout desconhecido, estado Nordic)
 ```

@@ -64,7 +64,7 @@ export function assessPrice(o, hist, peers) {
     else if (!hist && claimed >= 0.7 && vsPeers == null) artificial = `desconto anunciado de ${pct(claimed)} sem histórico nem equivalentes que o confirmem`;
   }
   if (artificial) { signals.push('desconto-artificial'); reasons.push('Desconto artificial: ' + artificial + '.'); }
-  else if (claimed != null && claimed >= 0.05) { signals.push('desconto-anunciado'); reasons.push(`Desconto anunciado pela loja: ${pct(claimed)} (de R$ ${fmt(o.originalPrice)}). Não é comprovação.`); }
+  else if (claimed != null && claimed >= 0.05) { signals.push('desconto-anunciado'); reasons.push(`Desconto anunciado pela loja: ${pct(claimed)} (de R$ ${fmt(o.originalPrice)}${o.originalPriceFrom === 'selo-off' ? ', calculado do selo "% OFF" exibido pelo ML' : ''}). Não é comprovação.`); }
 
   // --- histórico do próprio anúncio
   if (histOk) {

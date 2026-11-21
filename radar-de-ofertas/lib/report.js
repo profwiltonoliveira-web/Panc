@@ -4,6 +4,7 @@
 import { scoreAll, LABELS } from './scoring.js';
 import { scoreAll as legacyScoreAll, LABELS as LEGACY_LABELS } from './scoring-v05.js';
 import { summarizeHistory } from './analyzer.js';
+import { signalCounts, signalKeys, SIGNAL_OPTIONS } from './filters.js';
 
 function stats(nums) {
   const a = nums.slice().sort((x, y) => x - y);
@@ -65,6 +66,31 @@ export function classificationReport(offers, prices = {}, now = Date.now(), weig
       notaMediaSemHistorico: avg(novo.filter((o) => !withHist.includes(o)).map((o) => o.score)),
       descontosComprovados: novo.filter((o) => o.realDiscount.level === 'comprovado').length
     },
-    mudancas: countBy(novo.map((o, i) => [antigo[i].label, o.label]), ([a, b]) => `${LEGACY_LABELS[a] || a} → ${LABELS[b]}`)
+    mudancas: countBy(novo.map((o, i) => [antigo[i].label, o.label]), ([a, b]) => `${LEGACY_LABELS[a] || a} → ${LABELS[b]}`),
+    filtros: filterDiagnostic(novo)
+  };
+}
+
+/**
+ * Diagnóstico dos filtros de sinal de preço sobre as ofertas pontuadas:
+ * quantas ofertas cada opção traz, ofertas sem sinal/inválidas e a completude dos dados
+ * que alimentam os sinais (preço "de", equivalentes, histórico, estratégia de leitura).
+ */
+export function filterDiagnostic(scored) {
+  const sc = signalCounts(scored, {});
+  const names = Object.fromEntries(SIGNAL_OPTIONS);
+  return {
+    total: sc.total,
+    porSinal: Object.fromEntries(Object.entries(sc.counts).map(([k, v]) => [names[k], v])),
+    sinalPrincipal: countBy(scored, (o) => names[o.priceSignal] || `inválido: ${o.priceSignal}`),
+    semSinalFiltravel: scored.filter((o) => !signalKeys(o).length).length,
+    sinalInvalido: sc.invalido,
+    precoDe: {
+      anunciadoNoCard: scored.filter((o) => o.originalPrice > o.price && o.originalPriceFrom !== 'selo-off').length,
+      derivadoDoSeloOff: scored.filter((o) => o.originalPriceFrom === 'selo-off').length,
+      ausente: scored.filter((o) => !(o.originalPrice > o.price)).length
+    },
+    comPeloMenos3Equivalentes: scored.filter((o) => o.peers >= 3).length,
+    lidoPor: countBy(scored, (o) => o.parsedBy || 'não registrado (lido antes da v0.6.2)')
   };
 }
