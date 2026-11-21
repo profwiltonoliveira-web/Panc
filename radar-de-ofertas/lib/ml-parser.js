@@ -11,7 +11,7 @@
 
 (function () {
   const ML_HOST_RE = /^([a-z0-9-]+\.)*mercadoli(vre|bre)\.com(\.br)?$/i;
-  const CARD_SEL = 'li.ui-search-layout__item, div.poly-card, div.ui-search-result__wrapper, div.andes-card.poly-card';
+  const CARD_SEL = 'li.ui-search-layout__item, div.poly-card, div.ui-search-result__wrapper, div.andes-card.poly-card, li.promotion-item, div.promotion-item';
   const ITEM_HREF_RE = /\/MLB-\d{6,}|\/p\/MLB\d{6,}|[?&#](wid|item_id)=MLB\d{6,}|\/up\/MLBU\d{6,}/i;
 
   // ---------- utilidades ----------
@@ -99,9 +99,25 @@
       condition: o.condition || null,
       image: safeImage(o.image),
       link,
-      seller: o.seller ? clean(o.seller).replace(/^por\s+/i, '') : null,
+      seller: o.seller ? clean(o.seller).replace(/^(por|vendido por)\s+/i, '') : null,
+      officialStore: !!o.officialStore || /loja oficial|official store/i.test(String(o.seller || '')),
+      badges: (o.badges || []).map(clean).filter(Boolean).slice(0, 4),
+      rating: o.rating > 0 && o.rating <= 5 ? Math.round(o.rating * 10) / 10 : null,
+      reviews: o.reviews > 0 ? Math.round(o.reviews) : null,
       installments: null
     };
+  }
+
+  // Selos relevantes para promoções (texto curto exibido pelo próprio ML no card).
+  const BADGE_RE = /oferta do dia|oferta rel[aâ]mpago|rel[aâ]mpago|mais vendido|oferta imperd[ií]vel|menor pre[cç]o|recomendado|full\b/i;
+  function badgesFromText(text) {
+    const out = [];
+    const t = String(text || '');
+    for (const m of t.matchAll(new RegExp(BADGE_RE.source, 'gi'))) {
+      const b = m[0].toUpperCase();
+      if (!out.includes(b)) out.push(b);
+    }
+    return out;
   }
 
   // ---------- A) JSON "polycard" embutido em <script> ----------
@@ -156,8 +172,11 @@
     const shipText = textOf(comp('shipping')) + ' ' + textOf(comp('shipped_from'));
     const pics = pc.pictures && Array.isArray(pc.pictures.pictures) ? pc.pictures.pictures : [];
     const image = pics[0] && pics[0].id ? `https://http2.mlstatic.com/D_NQ_NP_${pics[0].id}-O.webp` : '';
-    const seller = textOf(comp('seller'));
+    const sellerC = comp('seller');
+    const seller = textOf(sellerC);
     const extra = textOf(comp('highlight')) + ' ' + textOf(comp('item_condition')) + ' ' + textOf(comp('condition'));
+    const reviews = comp('reviews') || {};
+    const official = !!(md.official_store_id || (sellerC && (sellerC.official_store || sellerC.official_store_id))) || /loja oficial/i.test(seller);
     return makeItem({
       title,
       link,
@@ -166,7 +185,11 @@
       ...shippingFromText(shipText),
       condition: conditionFromText(extra),
       image,
-      seller
+      seller,
+      officialStore: official,
+      badges: badgesFromText(textOf(comp('highlight')) + ' ' + textOf(comp('promotions')) + ' ' + textOf(comp('pds'))),
+      rating: typeof reviews.rating_average === 'number' ? reviews.rating_average : null,
+      reviews: typeof reviews.total === 'number' ? reviews.total : null
     });
   }
 
@@ -222,14 +245,21 @@
   }
 
   function parseCard(card) {
-    const a = pick(card, ['a.poly-component__title', 'h3 a[href]', 'h2 a[href]', 'a.ui-search-item__group__element', 'a.ui-search-link']);
-    const titleEl = pick(card, ['.poly-component__title', '.ui-search-item__title', 'h3', 'h2']);
-    const currentBox = pick(card, ['.poly-price__current', '.ui-search-price__second-line', '.ui-search-price--size-medium']);
+    const a = pick(card, ['a.poly-component__title', 'h3 a[href]', 'h2 a[href]', 'a.ui-search-item__group__element', 'a.ui-search-link', 'a.promotion-item__link-container']);
+    const titleEl = pick(card, ['.poly-component__title', '.ui-search-item__title', '.promotion-item__title', 'h3', 'h2']);
+    const currentBox = pick(card, ['.poly-price__current', '.ui-search-price__second-line', '.ui-search-price--size-medium', '.andes-money-amount-combo__main-container']);
     const prevEl = pick(card, ['s.andes-money-amount', '.andes-money-amount--previous', '.ui-search-price__original-value']);
     const img = pick(card, ['img.poly-component__picture', 'img']);
-    const sellerEl = pick(card, ['.poly-component__seller', '.ui-search-official-store-label']);
+    const sellerEl = pick(card, ['.poly-component__seller', '.ui-search-official-store-label', '.promotion-item__seller']);
+    const highlight = pick(card, ['.poly-component__highlight', '.ui-search-item__highlight-label', '.promotion-item__today-offer-text', '.promotion-item__lightning']);
+    const ratingEl = pick(card, ['.poly-reviews__rating', '.ui-search-reviews__rating-number']);
+    const reviewsEl = pick(card, ['.poly-reviews__total', '.ui-search-reviews__amount']);
     const text = clean(card.textContent);
     return makeItem({
+      officialStore: /loja oficial/i.test(sellerEl ? sellerEl.textContent : '') || !!card.querySelector('.poly-component__seller svg, .ui-search-official-store-label'),
+      badges: badgesFromText(highlight ? highlight.textContent : ''),
+      rating: ratingEl ? Number(clean(ratingEl.textContent).replace(',', '.')) : null,
+      reviews: reviewsEl ? Number(clean(reviewsEl.textContent).replace(/\D/g, '')) : null,
       title: (titleEl && titleEl.textContent) || (a && a.textContent),
       link: a && a.getAttribute('href'),
       price: readMoney(firstCurrentAmount(currentBox || card)),

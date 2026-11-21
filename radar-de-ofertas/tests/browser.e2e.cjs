@@ -79,6 +79,7 @@ const HTML_OK = `<html><body><ol class="ui-search-layout">${RESULTS}</ol></body>
   page.on('pageerror', (e) => errors.push(e.message));
   const url = `chrome-extension://${id}/app.html`;
   await page.goto(url);
+  await page.click('[data-tab=buscar]'); // v0.4: a tela inicial é o painel do radar
   const results = [];
   const check = async (name, fn) => {
     try { await fn(); results.push(['OK', name]); } catch (e) { results.push(['FALHOU', name + ' — ' + e.message.split('\n')[0]]); }

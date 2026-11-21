@@ -1,156 +1,157 @@
-# Radar de Ofertas — extensão Chrome (MVP v0.3.0)
+# Radar de Ofertas — caçador automático de promoções (v0.4.0)
 
-Busca produtos no Mercado Livre, compara preços entre anúncios **equivalentes** (incluindo o frete, quando informado), classifica as ofertas e guarda um histórico local de preços.
-Sem backend e sem serviços pagos: tudo roda no navegador, e os dados ficam em `chrome.storage.local`.
+Extensão do Google Chrome (Manifest V3, JavaScript puro, sem backend e sem serviços pagos) que **descobre automaticamente** ofertas no Mercado Livre por categoria, registra os preços observados, **pontua as oportunidades** e gera um texto pronto para divulgar em grupos de promoções.
+
+Você não precisa saber qual produto procurar: clique em **Iniciar Radar**.
 
 ---
 
-## 1. Instalação (modo desenvolvedor)
+## 1. Instalação
+1. Descompacte o ZIP numa pasta. Se já tinha uma versão anterior, remova-a em `chrome://extensions`.
+2. Abra `chrome://extensions` e ative o **Modo do desenvolvedor**.
+3. Clique em **Carregar sem compactação** e selecione a pasta que contém `manifest.json`.
+4. Fixe o ícone. **O clique no ícone abre o painel numa aba**: não existe mais popup.
+5. Antes da primeira varredura, abra https://www.mercadolivre.com.br numa aba normal. Se aparecer verificação de segurança, conclua.
 
-1. Baixe/clone o repositório e localize a pasta `radar-de-ofertas/`.
-2. No Chrome, abra `chrome://extensions`.
-3. Ative **Modo do desenvolvedor** (canto superior direito).
-4. Clique em **Carregar sem compactação** e selecione a pasta `radar-de-ofertas/` (a que contém `manifest.json`).
-5. Clique no ícone de quebra-cabeça da barra e **fixe** o Radar de Ofertas.
-6. Para atualizar depois de mudar o código: em `chrome://extensions`, clique em ↻ na extensão.
-
-## 2. Primeiro uso — leia isto
-
-- Antes da primeira busca, **abra https://www.mercadolivre.com.br em uma aba normal**. Se aparecer verificação de segurança, conclua-a. A extensão usa a mesma sessão do navegador.
-- Digite o produto da forma mais específica possível (ex.: `iphone 13 128gb`, `fone jbl tune 520bt`). Termos específicos melhoram a detecção de anúncios equivalentes.
-- O histórico começa vazio. **Nas primeiras buscas nenhum anúncio recebe "Excelente oportunidade"**, por desenho: sem histórico não há como comprovar que o desconto é real. Repita a busca em dias diferentes para acumular evidência.
-
-## 3. Como usar
-
+## 2. Uso
 | Onde | O quê |
 |---|---|
-| Ícone da extensão | Abre o popup. **⤢ Tela cheia** abre a mesma interface numa aba. |
-| Botão direito sobre um texto selecionado | **Buscar "…" no Radar de Ofertas** abre a busca numa aba. |
-| Aba **Buscar** | Resultados, filtros e classificações. Clique em **Por quê?** para ver o motivo de cada classificação. |
-| ☆ / ★ em um resultado | Acompanhar o preço daquele anúncio. |
-| Aba **Histórico** | Pesquisas recentes (clique para repetir), preços observados por anúncio com mini-gráfico, **Exportar JSON** e **Apagar histórico**. |
-| Aba **Acompanhando** | Itens marcados com ★ e a variação desde que foram marcados. |
+| **Iniciar Radar / Atualizar** (topo) | Varre as fontes de ofertas, levando cerca de 1 minuto com 1 página por categoria. A varredura roda em segundo plano, então você pode fechar o painel. |
+| **Radar automático** | As 30 melhores oportunidades, as configurações e o resultado de cada fonte da última varredura. |
+| **Todas as ofertas / Eletrônicos / Casa e cozinha / Moda / Beleza / Outras categorias** | Listas filtráveis. |
+| **Copiar oferta** | Copia um texto pronto para WhatsApp/Telegram (ver §6). |
+| ☆ / ★ | Favoritar. Os favoritos ficam na aba **Favoritos** e nunca são apagados pela limpeza automática. |
+| **Histórico** | Varreduras (com **Copiar diagnóstico**), pesquisas manuais, preços observados (mini-gráfico) e exportar/apagar. |
+| **Busca manual** | O comparador da versão anterior, para pesquisar um produto específico. |
 
-### Filtros
-- **Só frete grátis**.
-- **Ocultar usados**: esconde anúncios identificados como usados ou recondicionados. Anúncios sem indicação de condição continuam visíveis.
-- **Só equivalentes**: esconde acessórios e anúncios que não contêm os termos da busca.
-- Classificação e ordenação (menor ou maior total, maior desconto anunciado). Anúncios não equivalentes ficam sempre no fim.
+**Filtros:** texto, categoria, faixa de preço, desconto mínimo, "só desconto comprovado", frete grátis, condição, qualidade da oportunidade, ocultar acessórios e ordenação (pontuação, desconto, preço ou mais recentes).
 
-## 4. Como os resultados são obtidos
+**Configurações** (aba Radar automático):
+- Monitoramento automático: desligado, 30 min, 1 h, 3 h ou 6 h. Usa `chrome.alarms` e roda enquanto o Chrome estiver aberto. O intervalo mínimo é de 30 min.
+- Páginas por categoria: de 1 a 3.
+- Usar aba do navegador se a leitura direta falhar: na varredura manual (ligado por padrão) e no monitoramento automático (desligado por padrão, numa janela minimizada).
+- Notificar novas oportunidades boas, só no monitoramento automático.
 
-A extensão tenta, nesta ordem:
+## 3. Fontes de dados
+Somente páginas **públicas** do Mercado Livre, consultadas como um navegador comum:
 
-1. **API pública oficial** (`api.mercadolibre.com/sites/MLB/search`). Hoje responde **HTTP 403** sem autenticação; a chamada é mantida porque é gratuita e volta a funcionar se o acesso for reaberto.
-2. **Leitura direta** da página `lista.mercadolivre.com.br/<termo>` por requisição.
-3. **Aba do navegador** (automático, se 1 e 2 não trouxerem anúncios): a extensão abre a página de resultados **em segundo plano no seu Chrome**, espera ela carregar e lê os anúncios do DOM. Se a leitura der certo, fecha a aba.
-   - Se o Mercado Livre pedir **verificação de segurança, login ou bloquear** a página, **nada é contornado**: a aba fica aberta e aparece o botão **Ir para a aba do ML**. Resolva lá e clique em **Ler aba do ML**.
-4. **Ler aba do ML** (manual): lê a página de resultados do ML que você abriu e pesquisou normalmente no site. O termo pesquisado na página é usado na análise.
+| Fonte | URL | Situação |
+|---|---|---|
+| Ofertas do dia (todas) | `https://www.mercadolivre.com.br/ofertas` (+ `?page=N`) | Integrada. URL oficial da seção de ofertas. |
+| Ofertas até R$ 100 | `…/ofertas?price=0.0-100.0&container_id=MLB779362-1` | Integrada. URL vista na página inicial real do ML. |
+| Ofertas por categoria (12) | `…/ofertas?category=<ID>` | Integrada. Os IDs de Ferramentas (MLB263532) e Saúde (MLB264586) foram vistos na página real. Os demais são os IDs públicos conhecidos das categorias do ML Brasil e são conferidos em tempo real pelo resultado de cada fonte. |
+| API oficial `api.mercadolibre.com` (busca) | — | **Não usada no radar**: responde HTTP 403 sem autenticação (teste real), e a autenticação exigiria cadastro de aplicativo. Continua sendo tentada na busca manual. |
 
-Para ler os anúncios, a extensão tenta três estratégias, e a usada aparece no resumo como "estratégia …":
+### Como cada página é lida
+1. **Leitura direta**: `fetch` da página e análise do HTML num *offscreen document* (o service worker do MV3 não tem DOM).
+2. **Aba do navegador**, se a leitura direta não trouxer anúncios: a página é aberta numa **janela minimizada** reutilizada, carregada normalmente pelo Chrome com a sua sessão, e os anúncios são lidos do DOM. Ao fim, a janela é fechada.
+3. Para extrair os anúncios: dados "polycard" embutidos na página (`json`), cards renderizados (`dom`) ou links de anúncio com preço (`links`).
 
-| Estratégia | O que lê |
+### Limites e proteções (nada é contornado)
+- Intervalo de **3 s entre páginas**, poucas páginas por categoria e intervalo mínimo de 30 min no monitoramento.
+- Se o ML mostrar **verificação de segurança, login ou bloqueio**, a varredura **para de usar a aba**, registra o motivo e, na varredura manual, deixa a janela aberta com o botão **Ir para a janela do Mercado Livre**. Você resolve lá e clica em **Atualizar**.
+- Fontes bloqueadas entram em **pausa de 6 h** no monitoramento automático.
+- Se a leitura direta falhar em 3 fontes seguidas sem alternativa, a varredura é interrompida.
+
+## 4. Dados coletados por oferta
+Título, preço atual, preço "de" anunciado (se houver), imagem (só do CDN `mlstatic.com`), vendedor/loja, se é **loja oficial**, avaliação (quando o card mostra), selos do ML (oferta do dia, relâmpago, mais vendido), frete grátis, condição, link e categoria.
+- **Sem duplicados**: o mesmo anúncio visto em várias fontes vira uma oferta só. A categoria vem da página de categoria (ou, na página geral, é inferida pelo título).
+- Ofertas não vistas há 3 dias saem do painel. O histórico de preços fica até 5.000 anúncios.
+
+## 5. Pontuação e classificação
+Pontuação de 0 a 100, com o motivo de cada ponto em **Por quê?**:
+
+| Critério | Efeito |
 |---|---|
-| `json` | Dados dos cards ("polycard") que a página traz embutidos em `<script>`. É a mais resistente a mudanças visuais. |
-| `dom` | Cards renderizados (`li.ui-search-layout__item`, `.poly-card`). |
-| `links` | Varredura genérica: links de anúncio (`/MLB-…`, `/p/MLB…`) com preço no mesmo bloco. |
-
-**Nenhum resultado é inventado.** Se nada funcionar, a extensão mostra o motivo de cada etapa e o botão **Copiar diagnóstico**.
-
-### Diagnóstico
-O botão **Copiar diagnóstico** copia um JSON **estrutural**, sem textos da página e sem dados pessoais. Ele contém:
-- versão, origem (leitura direta ou aba), URL, status HTTP, título da página e tamanho do HTML;
-- **tipo de página**: `resultados`, `verificacao`, `bloqueio`, `login`, `sem-resultados`, `pagina-de-produto` ou `desconhecida`;
-- quantos anúncios cada estratégia leu e contagens de elementos (cards, preços, links de anúncio, scripts com "polycard");
-- as classes CSS mais frequentes da busca (`ui-search…`, `poly…`), para ajustar os seletores.
-
-Cole esse JSON numa mensagem para o desenvolvedor quando a coleta falhar.
-
-| Mensagem | O que fazer |
-|---|---|
-| `verificação de segurança` | Clique em **Ir para a aba do ML**, conclua a verificação e clique em **Ler aba do ML**. |
-| `bloqueou o acesso ("Hubo un error…")` | Desative VPN ou proxy se houver, abra mercadolivre.com.br normalmente, pesquise no site e clique em **Ler aba do ML**. |
-| `nenhum anúncio foi reconhecido` | Clique em **Copiar diagnóstico** e envie: os seletores precisam de ajuste. |
-| `o histórico não pôde ser salvo` | Os resultados continuam visíveis. Exporte e apague o histórico. |
-
-## 5. Comparação de preços
-
-- **Total** = preço + frete, quando o frete é conhecido. Quando não é, o total aparece com `*`. Normalmente o frete só é identificado quando é grátis.
-- **Anúncios equivalentes**: só se comparam anúncios do mesmo grupo.
-  - O título precisa conter todos os termos da busca. São aceitos plural e "520bt" = "520 bt". Números precisam bater exatamente: "15" ≠ "150".
-  - Acessórios e peças ficam fora quando a palavra aparece antes do produto ("**Capa** para iPhone 13", "**Película** iPhone 13"). Títulos com "compatível", "réplica" ou "similar" também ficam fora.
-  - Variantes formam grupos separados: Pro, Max, Plus, Mini, Ultra, Lite, FE etc., capacidades (128 GB vs 256 GB) e usado/recondicionado vs novo.
-- **% vs mais barato equivalente** e **% vs mediana** são calculados dentro do grupo. A mediana só é usada com **3 ou mais** anúncios equivalentes. Anúncios abaixo de 40% da mediana não servem de referência de "mais barato".
-
-## 6. Classificação de promoções
-
-Cada classificação mostra o motivo e um nível de **confiança**: baixa, média ou alta. A confiança cresce com o número de dias de histórico: 1 dia = baixa, 2 = média, 3 ou mais = alta.
+| **Desconto comprovado** (preço atual vs. média observada pelo Radar em ≥ 2 dias anteriores) | até +40, e +5 se for o menor preço já registrado |
+| **Desconto anunciado** pela loja (preço "de") | até +18, peso menor por não ser comprovado |
+| **Preço frente a anúncios semelhantes** (mesma categoria; título equivalente; acessórios à parte) | até +15. Isso é "preço competitivo", **não** desconto |
+| Loja oficial | +8 |
+| Avaliação ≥ 4,5 (≥ 10 avaliações) / < 3,8 | +4 / −6 |
+| Frete grátis | +7 |
+| Usado/recondicionado | −10 |
+| Selo "oferta do dia"/"relâmpago" do ML; anúncio com imagem | +3; +2 |
 
 | Classificação | Regra |
 |---|---|
-| **Excelente oportunidade** | **Só com histórico**: menor preço já registrado para o anúncio e ≥10% abaixo da média histórica. |
-| **Boa oportunidade** | ≥3% abaixo da média histórica; ou, sem histórico, ≥20% abaixo da mediana de ≥3 equivalentes (confiança baixa). |
-| **Preço regular** | Dentro ou acima da faixa, ou sem dados suficientes para comparar. |
-| **Desconto suspeito** | Preço "de" nunca observado no histórico (o maior preço visto é <90% dele); "% OFF" ≥50% sem histórico; ou preço >60% abaixo da mediana de equivalentes. |
+| **Excelente oportunidade** | Exige **desconto comprovado ≥ 10%** e pontuação ≥ 40. |
+| **Boa oportunidade** | Alguma evidência (comprovado ≥ 3%, anunciado ≥ 20% sem contradição, ou ≥ 20% abaixo de semelhantes) e pontuação ≥ 12. |
+| **Preço regular** | Sem evidência de vantagem. |
+| **Desconto suspeito** | Preço "de" nunca observado no histórico; "% OFF" ≥ 70% sem histórico; ou preço > 60% abaixo de semelhantes. Ofertas suspeitas **não exibem desconto** e têm pontuação máxima 30. |
 
-Observações:
-- O histórico registra só o **preço de venda** observado nas buscas. O preço "de" (riscado) anunciado pelo vendedor não vira evidência.
-- Observações da última hora são ignoradas, para a busca não "confirmar a si mesma".
+**Preço baixo não é tratado como desconto verdadeiro.** Na primeira varredura nada é "Excelente", porque ainda não há histórico. Ative o monitoramento para acumular evidência.
 
-## 7. Histórico e privacidade
+### Acessórios
+Títulos que começam com capa, película, carregador, cabo, suporte, pulseira, controle etc., ou que trazem "compatível", são marcados como **acessório**. Eles são comparados só com outros acessórios, e um filtro permite ocultá-los.
 
-- Fica salvo apenas em `chrome.storage.local`, neste navegador. A extensão só faz requisições ao Mercado Livre, e as imagens vêm do CDN `mlstatic.com`.
-- No máximo 1 ponto de preço por anúncio por hora, 120 pontos por anúncio, 200 pesquisas e 2.500 anúncios. Ao passar disso, saem os anúncios vistos há mais tempo; **itens com ★ nunca são removidos**.
-- Anúncios cujo link não tem ID (alguns patrocinados, com link `click1.mercadolivre…`) não entram no histórico e não podem receber ★.
+## 6. Texto "Copiar oferta"
+```
+🔥 Smartphone Samsung Galaxy A15 128GB Azul
 
-## 8. Permissões (Manifest V3)
+💰 R$ 899,00 · Frete grátis 🚚
+🏷️ De R$ 1.299,00 por R$ 899,00 (31% OFF anunciado pela loja)
+🏪 Samsung (loja oficial)
 
+👉 https://produto.mercadolivre.com.br/MLB-…
+
+_Preço e disponibilidade sujeitos a alteração._
+```
+Com desconto comprovado, a linha passa a ser "📉 X% abaixo do preço médio que acompanhamos (R$ …)". O link sai **limpo**, sem parâmetros de rastreamento. O exemplo acima é ilustrativo.
+
+## 7. Permissões (Manifest V3)
 | Permissão | Motivo |
 |---|---|
-| `storage` | Histórico, pesquisas e itens acompanhados. |
-| `contextMenus` | Item "Buscar no Radar de Ofertas" no botão direito. |
-| `scripting` | Injetar o leitor (`lib/ml-parser.js`, só leitura) **apenas** nas abas `lista.mercadolivre.com.br` e `www.mercadolivre.com.br`, quando a busca precisa da aba ou você clica em **Ler aba do ML**. |
-| `host_permissions`: `api.mercadolibre.com`, `lista.mercadolivre.com.br`, `www.mercadolivre.com.br` | Buscar resultados e, nessas abas, ler a URL e injetar o leitor. |
+| `storage` | Ofertas, histórico de preços, favoritos, varreduras e configurações (tudo local). |
+| `alarms` | Monitoramento periódico. |
+| `offscreen` | Analisar o HTML das páginas fora do service worker (`DOM_PARSER`). |
+| `scripting` | Injetar o leitor (`lib/ml-parser.js`, só leitura) **apenas** nas páginas do ML abertas pela varredura ou pela busca manual. |
+| `notifications` | Avisar sobre novas oportunidades boas no monitoramento. |
+| `contextMenus` | "Buscar no Radar de Ofertas" no botão direito (busca manual). |
+| host: `www.mercadolivre.com.br`, `lista.mercadolivre.com.br`, `api.mercadolibre.com` | Ler as páginas de ofertas e de busca. |
 
-Não usa `tabs`, `<all_urls>`, `webRequest` nem content scripts permanentes: o leitor só é injetado sob demanda nas páginas do ML. A CSP só permite scripts da própria extensão e imagens de `*.mlstatic.com`.
+Sem `<all_urls>`, sem `tabs` e sem `webRequest`. Nenhum dado sai do navegador.
 
-## 9. Testes
-
+## 8. Testes
 ```bash
 cd radar-de-ofertas
-npm test               # 24 testes unitários (Node ≥ 18)
-npm run test:e2e       # 21 cenários com a extensão no Chromium (Playwright)
-npm run test:e2e:tab   # 7 cenários da coleta v0.3: JSON embutido, aba em 2º plano, "Ler aba do ML", verificação, diagnóstico
+npm test                 # testes unitários: pontuação, acessórios, agrupamento, categorias, fontes, texto, busca manual
+npm run test:e2e:radar   # radar completo no Chromium
+npm run test:e2e         # busca manual
+npm run test:e2e:tab     # leitura pela aba (busca manual)
 ```
+Os testes e2e usam **rede simulada com páginas sintéticas** (servidor HTTPS local). **Eles não provam que a coleta funciona no site real.**
 
-Os testes e2e usam **rede simulada com HTML sintético**. `test:e2e:tab` sobe um servidor HTTPS local e aponta os domínios do ML para ele via `--host-resolver-rules`. Eles validam a lógica, mas **não substituem** o teste com o site real.
+### Teste real (no seu Chrome)
+1. Instale a v0.4.0 e abra mercadolivre.com.br numa aba.
+2. Clique no ícone e depois em **Iniciar Radar**. Acompanhe "Fontes da última varredura": ✅ = anúncios lidos, ⚪ = página sem anúncios, ⛔ = bloqueio/verificação, ⚠️ = erro.
+3. Abra 3 ofertas e confira se título, preço e loja batem com a página do anúncio.
+4. Confira se a categoria das ofertas faz sentido (ex.: aba Moda).
+5. Se algo falhar, vá em **Histórico → Varreduras → Copiar diagnóstico** e envie o JSON. Ele traz, por fonte: tipo de página, estratégia, contagens e classes CSS, sem dados pessoais.
 
-### Checklist de teste real (no seu Chrome)
-1. Atualize a extensão: em `chrome://extensions`, clique em ↻, ou remova e carregue a pasta nova.
-2. Abra o popup e busque `Samsung Galaxy S25 256GB`.
-3. Se a leitura direta falhar, a extensão abre a aba sozinha. Aguarde até cerca de 30 s.
-4. Se aparecer **Ação necessária**, clique em **Ir para a aba do ML**, resolva a verificação e clique em **Ler aba do ML**.
-5. Com resultados, veja no resumo a linha "Fonte: … estratégia …" e confira se 3 anúncios abrem a página certa, com o mesmo título e preço.
-6. Se falhar, clique em **Copiar diagnóstico** e envie o JSON junto com a mensagem exibida.
-
-## 10. Limitações conhecidas
-- **Coleta real ainda não confirmada**: o ML bloqueia (403, "Hubo un error") o servidor de desenvolvimento, inclusive numa aba do Chromium. As estratégias `json` e `dom` usam o formato conhecido das páginas do ML e foram testadas só com HTML sintético. O diagnóstico existe para fechar essa lacuna com dados do seu navegador.
-- A leitura pela aba abre uma aba em segundo plano por alguns segundos.
-- A leitura da página pública depende do HTML do ML e pode quebrar se o layout mudar.
-- A equivalência é heurística, baseada no texto do título. Não diferencia cores nem modelos sem marcador no título, e pode errar em títulos incomuns.
-- O frete pago geralmente não é informado na listagem, então o total com frete pago fica desconhecido (`*`).
-- Itens acompanhados só têm o preço atualizado quando aparecem numa busca. Não há atualização automática em segundo plano.
-- Produto de catálogo (`/p/MLB…`) sem `wid` agrupa vendedores: o histórico registra o preço exibido, que pode ser de vendedores diferentes ao longo do tempo.
+## 9. Limitações
+- **A coleta ainda não foi confirmada com o site real:** o ML bloqueia o servidor de desenvolvimento (HTTP 403). Na v0.3, a busca manual do usuário leu 48 anúncios reais, o que indica que o leitor funciona no navegador real. As páginas `/ofertas` usam os mesmos cards, mas não foram vistas a partir daqui.
+- Os IDs de categoria (exceto Ferramentas e Saúde) não foram conferidos com a página real. Se um deles estiver errado, a fonte mostrará anúncios gerais ou nenhum.
+- A reputação do vendedor (MercadoLíder, vendas) não aparece nos cards de oferta. Só "loja oficial" e a avaliação do produto são usadas.
+- O frete pago geralmente não é informado na lista, então só "frete grátis" pesa.
+- O desconto comprovado depende do histórico acumulado pelo Radar (≥ 2 dias).
+- O agrupamento de equivalentes e a detecção de acessórios são heurísticos, baseados no título.
+- O monitoramento só roda com o Chrome aberto. Com leitura por aba no modo automático, uma janela minimizada aparece rapidamente.
 
 ## Estrutura
 ```
-manifest.json        MV3
-background.js        menu de contexto
-app.html/css/js      interface (popup e aba)
-lib/mercadolivre.js  busca (API oficial + leitura direta) e mensagens de falha
-lib/ml-parser.js     leitor de anúncios (json/dom/links) + diagnóstico; script clássico, também injetado na aba
-lib/tab-reader.js    busca pela aba do navegador (chrome.tabs + chrome.scripting)
-lib/analyzer.js      equivalência, comparação e classificação
-lib/storage.js       histórico em chrome.storage.local (com poda)
-tests/               unitários (node --test) e e2e (Playwright, rede simulada; tab.e2e com servidor HTTPS local)
+manifest.json         MV3 (ícone abre o painel)
+background.js         service worker: comandos, alarmes, notificações, menu de contexto
+offscreen.html/js     leitura direta + DOMParser fora do service worker
+app.html/css          painel
+panel.js              radar, listas por categoria, filtros, copiar oferta, favoritos, varreduras
+app.js                abas, busca manual, histórico, favoritos
+lib/categories.js     categorias, palavras-chave e fontes
+lib/discovery.js      motor de descoberta (fontes, leitura direta/aba, limites, pausas)
+lib/scoring.js        pontuação, acessórios, agrupamento, texto de divulgação
+lib/ml-parser.js      leitor de anúncios (json/dom/links) + diagnóstico; também injetado nas abas
+lib/storage.js        ofertas, histórico, favoritos, varreduras, configurações
+lib/analyzer.js       equivalência e classificação da busca manual
+lib/mercadolivre.js   busca manual (API + leitura direta)
+lib/tab-reader.js     busca manual pela aba
+tests/                unitários (node --test) e e2e (Playwright, rede simulada)
 ```

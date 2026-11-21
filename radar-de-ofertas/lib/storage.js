@@ -10,7 +10,7 @@
 
 const MAX_SEARCHES = 200;
 const MAX_POINTS = 120;
-const MAX_ITEMS = 2500;
+const MAX_ITEMS = 5000;
 const MIN_GAP_MS = 60 * 60 * 1000; // no máximo 1 ponto por hora por anúncio
 
 const area = () => chrome.storage.local;
@@ -31,7 +31,14 @@ export async function recordSearch(query, source, analysis, now = Date.now()) {
   searches.unshift({ q: query, t: now, source, count: s.count, equivalentCount: s.equivalentCount, min: s.refMin, median: s.median, max: s.max });
   if (searches.length > MAX_SEARCHES) searches.length = MAX_SEARCHES;
 
-  for (const it of analysis.items) {
+  addObservations(prices, analysis.items, now);
+  prune(prices, watch);
+  await area().set({ searches, prices });
+}
+
+// Registra preços observados (no máximo 1 ponto por anúncio por hora).
+export function addObservations(prices, items, now = Date.now()) {
+  for (const it of items) {
     // IDs derivados do título (sem ID de anúncio no link) não são confiáveis para histórico.
     if (String(it.id).startsWith('T:')) continue;
     const e = prices[it.id] || { title: it.title, link: it.link, image: it.image, points: [] };
@@ -43,13 +50,11 @@ export async function recordSearch(query, source, analysis, now = Date.now()) {
       last.price = it.price; // atualiza o ponto recente em vez de duplicar
       last.total = it.total;
     } else {
-      e.points.push({ t: now, price: it.price, total: it.total });
+      e.points.push({ t: now, price: it.price, total: it.total != null ? it.total : it.price });
       if (e.points.length > MAX_POINTS) e.points.splice(0, e.points.length - MAX_POINTS);
     }
     prices[it.id] = e;
   }
-  prune(prices, watch);
-  await area().set({ searches, prices });
 }
 
 export function prune(prices, watch, max = MAX_ITEMS) {
@@ -71,7 +76,7 @@ export async function toggleWatch(item) {
 }
 
 export async function clearAll() {
-  await area().remove(['searches', 'prices', 'watch']);
+  await area().remove(['searches', 'prices', 'watch', 'offers', 'scans', 'radarState']);
 }
 
 export async function bytesInUse() {
@@ -80,4 +85,79 @@ export async function bytesInUse() {
 
 export async function exportJson() {
   return JSON.stringify(await getAll(), null, 2);
+}
+
+// ---------- Radar automático ----------
+// offers:   { [id]: oferta + { category, sources[], firstSeen, lastSeen } }  (ofertas vistas recentemente)
+// scans:    [{ t, finished, mode, sources: [{ id, name, url, status, count, method, error, diagnostic }], found, newOffers }]
+// settings: { interval, pages, categories, allowTabManual, allowTabAuto, notify, minNotifyLabel }
+// radarState: { running, startedAt, current, done, total, message, needsUser, tabId }
+
+export const DEFAULT_SETTINGS = { interval: 0, pages: 1, categories: [], allowTabManual: true, allowTabAuto: false, notify: true };
+const OFFER_TTL = 3 * 24 * 60 * 60 * 1000; // ofertas não vistas há 3 dias saem do painel (o histórico de preços fica)
+const MAX_SCANS = 50;
+
+export async function getSettings() {
+  const { settings = {} } = await area().get('settings');
+  return { ...DEFAULT_SETTINGS, ...settings };
+}
+
+export async function saveSettings(patch) {
+  const s = { ...(await getSettings()), ...patch };
+  await area().set({ settings: s });
+  return s;
+}
+
+export async function getRadar() {
+  const { offers = {}, scans = [], prices = {}, watch = {}, radarState = null } = await area().get(['offers', 'scans', 'prices', 'watch', 'radarState']);
+  return { offers, scans, prices, watch, radarState };
+}
+
+export async function setRadarState(state) {
+  await area().set({ radarState: state });
+}
+
+/**
+ * Mescla ofertas encontradas numa fonte: deduplica por ID, registra preço observado.
+ * @returns {{ added: number, updated: number }}
+ */
+export async function mergeOffers(items, source, now = Date.now()) {
+  const { offers = {}, prices = {}, watch = {} } = await area().get(['offers', 'prices', 'watch']);
+  let added = 0, updated = 0;
+  for (const it of items) {
+    const prev = offers[it.id];
+    if (prev) {
+      updated++;
+      offers[it.id] = {
+        ...prev, ...it,
+        // categoria de uma página de categoria prevalece sobre a inferida pelo título
+        category: source.category ? source.category : prev.categoryFromSource ? prev.category : (it.category || prev.category),
+        categoryFromSource: !!(source.category || prev.categoryFromSource),
+        image: it.image || prev.image,
+        sources: [...new Set([...(prev.sources || []), source.id])],
+        firstSeen: prev.firstSeen,
+        lastSeen: now
+      };
+    } else {
+      added++;
+      offers[it.id] = { ...it, categoryFromSource: !!source.category, sources: [source.id], firstSeen: now, lastSeen: now };
+    }
+  }
+  for (const [id, o] of Object.entries(offers)) if (now - o.lastSeen > OFFER_TTL && !watch[id]) delete offers[id];
+  addObservations(prices, items, now);
+  prune(prices, watch);
+  await area().set({ offers, prices });
+  return { added, updated };
+}
+
+export async function saveScan(scan) {
+  const { scans = [] } = await area().get('scans');
+  const i = scans.findIndex((s) => s.t === scan.t);
+  if (i >= 0) scans[i] = scan; else scans.unshift(scan);
+  if (scans.length > MAX_SCANS) scans.length = MAX_SCANS;
+  await area().set({ scans });
+}
+
+export async function clearOffers() {
+  await area().remove(['offers', 'scans', 'radarState']);
 }

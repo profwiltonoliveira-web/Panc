@@ -84,6 +84,7 @@ function selfSigned() {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(sw.url().replace('background.js', 'app.html'));
+  await page.click('[data-tab=buscar]'); // v0.4: a tela inicial é o painel do radar
   const results = [];
   const check = async (name, fn) => {
     try { await fn(); results.push(['OK', name]); } catch (e) { results.push(['FALHOU', name + ' — ' + e.message.split('\n')[0]]); }
@@ -147,7 +148,7 @@ function selfSigned() {
     await page.click('text=Copiar diagnóstico');
     const txt = await page.evaluate(() => navigator.clipboard.readText());
     const d = JSON.parse(txt);
-    assert.equal(d.radarDeOfertas, '0.3.0');
+    assert.equal(d.radarDeOfertas, require('../manifest.json').version);
     const kinds = d.diagnosticos.map((x) => x.tipoDePagina);
     assert.ok(kinds.includes('verificacao'), JSON.stringify(kinds));
     assert.ok(d.diagnosticos.some((x) => x.origem === 'aba'));

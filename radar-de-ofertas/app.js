@@ -13,20 +13,17 @@ let controller = null;
 
 // ---------- abas ----------
 document.querySelectorAll('.tabs button').forEach((b) =>
-  b.addEventListener('click', () => showTab(b.dataset.tab))
+  b.addEventListener('click', () => showTab(b.dataset.tab, b.dataset.group))
 );
-function showTab(name) {
-  document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+function showTab(name, group) {
+  document.querySelectorAll('.tabs button').forEach((b) =>
+    b.classList.toggle('active', b.dataset.tab === name && (name !== 'ofertas' || (b.dataset.group || '') === (group || ''))));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + name));
   if (name === 'historico') renderHistory();
   if (name === 'acompanhando') renderWatch();
+  // painel do radar (panel.js) reage à troca de aba
+  document.dispatchEvent(new CustomEvent('radar:tab', { detail: { name, group: group || '' } }));
 }
-
-$('#openFull').addEventListener('click', () => {
-  const q = $('#q').value.trim();
-  chrome.tabs.create({ url: chrome.runtime.getURL('app.html?full=1' + (q ? '&q=' + encodeURIComponent(q) : '')) });
-  window.close();
-});
 
 // ---------- busca ----------
 $('#searchForm').addEventListener('submit', (e) => {
@@ -432,5 +429,5 @@ async function renderWatch() {
 
 // ---------- início ----------
 const initial = params.get('q');
-if (initial) { $('#q').value = initial; runSearch(initial); }
-else $('#q').focus();
+if (initial) { showTab('buscar'); $('#q').value = initial; runSearch(initial); }
+else if (params.get('tab')) showTab(params.get('tab'), params.get('group'));

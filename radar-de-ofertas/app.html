@@ -6,20 +6,95 @@
   <title>Radar de Ofertas</title>
   <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body class="full">
   <header class="top">
     <div class="brand"><img src="icons/icon32.png" alt="" width="22" height="22"> Radar de Ofertas</div>
-    <button id="openFull" class="ghost" title="Abrir em uma aba">⤢ Tela cheia</button>
+    <div class="top-actions">
+      <span id="lastRun" class="muted"></span>
+      <button id="radarStart" class="primary">Iniciar Radar</button>
+      <button id="radarStop" class="ghost" hidden>Parar</button>
+    </div>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" data-tab="buscar" class="active">Buscar</button>
+    <button role="tab" data-tab="radar" class="active">Radar automático</button>
+    <button role="tab" data-tab="ofertas" data-group="">Todas as ofertas</button>
+    <button role="tab" data-tab="ofertas" data-group="eletronicos">Eletrônicos</button>
+    <button role="tab" data-tab="ofertas" data-group="casa">Casa e cozinha</button>
+    <button role="tab" data-tab="ofertas" data-group="moda">Moda</button>
+    <button role="tab" data-tab="ofertas" data-group="beleza">Beleza</button>
+    <button role="tab" data-tab="ofertas" data-group="outras">Outras categorias</button>
+    <button role="tab" data-tab="acompanhando">Favoritos</button>
     <button role="tab" data-tab="historico">Histórico</button>
-    <button role="tab" data-tab="acompanhando">Acompanhando</button>
+    <button role="tab" data-tab="buscar">Busca manual</button>
   </nav>
 
   <main>
-    <section id="tab-buscar" class="tab active">
+    <section id="tab-radar" class="tab active">
+      <div id="radarStatus" class="status" hidden></div>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>Melhores oportunidades agora</h3>
+          <p class="hint">Ordenadas pela pontuação (0–100). "Desconto comprovado" só aparece quando o Radar já observou o preço do anúncio em dias anteriores.</p>
+          <ul id="topOffers" class="offers"></ul>
+        </div>
+        <aside class="panel side">
+          <h3>Configurações</h3>
+          <label>Monitoramento automático
+            <select id="setInterval">
+              <option value="0">Desligado</option>
+              <option value="30">A cada 30 min</option>
+              <option value="60">A cada 1 hora</option>
+              <option value="180">A cada 3 horas</option>
+              <option value="360">A cada 6 horas</option>
+            </select>
+          </label>
+          <label>Páginas por categoria
+            <select id="setPages"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+          </label>
+          <label class="chk"><input type="checkbox" id="setTabManual"> Usar aba do navegador se a leitura direta falhar (manual)</label>
+          <label class="chk"><input type="checkbox" id="setTabAuto"> Usar janela minimizada no monitoramento automático</label>
+          <label class="chk"><input type="checkbox" id="setNotify"> Notificar novas oportunidades boas</label>
+          <h3>Fontes da última varredura</h3>
+          <ul id="radarSources" class="sources"></ul>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tab-ofertas" class="tab">
+      <div class="filters offer-filters">
+        <input id="oText" type="search" placeholder="Filtrar por nome…">
+        <select id="oCat"><option value="">Todas as categorias</option></select>
+        <label>R$ <input id="oMin" type="number" min="0" step="1" placeholder="mín."> a <input id="oMax" type="number" min="0" step="1" placeholder="máx."></label>
+        <select id="oDisc">
+          <option value="0">Qualquer desconto</option>
+          <option value="10">≥ 10% de desconto</option>
+          <option value="20">≥ 20% de desconto</option>
+          <option value="30">≥ 30% de desconto</option>
+          <option value="50">≥ 50% de desconto</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="oProven"> Só desconto comprovado</label>
+        <label class="chk"><input type="checkbox" id="oFree"> Frete grátis</label>
+        <select id="oCond"><option value="">Qualquer condição</option><option value="novo">Novo</option><option value="usado">Usado/recondicionado</option></select>
+        <select id="oLabel">
+          <option value="">Qualquer qualidade</option>
+          <option value="boa">Boa ou excelente</option>
+          <option value="excelente">Só excelente</option>
+          <option value="suspeito">Só suspeitos</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="oAcc"> Ocultar acessórios</label>
+        <select id="oSort">
+          <option value="score">Maior pontuação</option>
+          <option value="discount">Maior desconto</option>
+          <option value="price">Menor preço</option>
+          <option value="new">Mais recentes</option>
+        </select>
+      </div>
+      <p id="offerCount" class="muted"></p>
+      <ul id="offerList" class="offers"></ul>
+    </section>
+
+    <section id="tab-buscar" class="tab">
       <form id="searchForm" class="search">
         <input id="q" type="search" placeholder="Ex.: fone bluetooth jbl" autocomplete="off" required maxlength="120">
         <button type="submit" id="searchBtn">Buscar</button>
@@ -53,6 +128,8 @@
         <button id="exportBtn" class="ghost">Exportar JSON</button>
         <button id="clearBtn" class="ghost danger">Apagar histórico</button>
       </div>
+      <h3>Varreduras do radar</h3>
+      <ul id="scanHistory" class="list"></ul>
       <h3>Pesquisas recentes</h3>
       <ul id="searchHistory" class="list"></ul>
       <h3>Preços observados</h3>
@@ -61,7 +138,7 @@
     </section>
 
     <section id="tab-acompanhando" class="tab">
-      <p class="hint">Marque ★ em um resultado para acompanhá-lo. Os preços são atualizados sempre que você faz uma busca que inclua o anúncio.</p>
+      <p class="hint">Marque ★ em uma oferta para guardá-la nos favoritos. O preço é atualizado sempre que o radar (ou uma busca) encontrar o anúncio de novo.</p>
       <ul id="watchList" class="list"></ul>
     </section>
   </main>
@@ -84,6 +161,24 @@
     </li>
   </template>
 
+  <template id="offerTpl">
+    <li class="offer">
+      <a class="o-thumb" target="_blank" rel="noopener noreferrer"><img alt="" loading="lazy" referrerpolicy="no-referrer"></a>
+      <div class="o-info">
+        <a class="o-title" target="_blank" rel="noopener noreferrer"></a>
+        <div class="o-prices"><span class="o-price"></span> <span class="o-prev"></span> <span class="o-disc"></span></div>
+        <div class="o-meta"></div>
+        <div class="o-row"><span class="badge"></span><span class="o-score"></span><span class="o-tags"></span></div>
+        <details class="why"><summary>Por quê?</summary><ul></ul></details>
+      </div>
+      <div class="o-actions">
+        <button class="o-copy ghost" title="Copiar texto da oferta para grupos">Copiar oferta</button>
+        <button class="star" title="Favoritar">☆</button>
+      </div>
+    </li>
+  </template>
+
   <script type="module" src="app.js"></script>
+  <script type="module" src="panel.js"></script>
 </body>
 </html>
