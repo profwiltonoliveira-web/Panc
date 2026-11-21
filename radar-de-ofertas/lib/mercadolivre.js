@@ -55,7 +55,9 @@ export async function searchMercadoLivre(query, { limit = 50, signal } = {}) {
     errors.push('Página de busca: ' + e.message);
   }
 
-  throw new SearchError('A leitura direta não trouxe anúncios.', errors, diagnostic, true);
+  // "Sem resultados" é resposta definitiva: não há por que abrir a aba.
+  const definitive = diagnostic && diagnostic.tipoDePagina === 'sem-resultados';
+  throw new SearchError(definitive ? 'O Mercado Livre não encontrou anúncios para esse termo.' : 'A leitura direta não trouxe anúncios.', errors, diagnostic, !definitive);
 }
 
 // ---------- 1) API oficial ----------
@@ -114,6 +116,7 @@ export function explainEmpty(d) {
     case 'pagina-de-produto': return 'o Mercado Livre redirecionou para uma página de produto, não de resultados.';
     case 'login': return 'o Mercado Livre pediu login.';
     case 'bloqueio': return 'o Mercado Livre devolveu uma página de bloqueio ("Hubo un error accediendo a esta pagina").';
+    case 'carregando': return 'a página veio só com a tela de carregamento: os anúncios são montados por JavaScript depois que a página abre, e a leitura direta não executa JavaScript. É preciso ler pela aba.';
     default:
       return `a página carregou (${d.tamanhoHtml} caracteres, ${d.elementos ? d.elementos.scripts : '?'} scripts), mas nenhum anúncio foi reconhecido` +
         (d.elementos && !d.elementos.cardsLi && !d.elementos.polyCard ? ' — os cards não vêm no HTML inicial (a página os monta via JavaScript).' : '.');

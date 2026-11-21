@@ -49,8 +49,8 @@ async function runSearch(query) {
     try {
       found = await searchMercadoLivre(query, { signal });
     } catch (e) {
-      if (e.name === 'AbortError' || !(e instanceof SearchError) || !e.blocked) throw e;
       if (e.diagnostic) diagnostics.push(e.diagnostic);
+      if (e.name === 'AbortError' || !(e instanceof SearchError) || !e.blocked) throw e;
       // Leitura direta bloqueada ou sem anúncios reconhecidos → página aberta numa aba do navegador.
       setStatus('A leitura direta não trouxe anúncios. Abrindo a página de resultados do Mercado Livre numa aba em segundo plano…', e.details);
       try {

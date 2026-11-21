@@ -89,12 +89,15 @@ async function readDirect(url) {
 
 // ---------- leitura por aba (janela minimizada reutilizada) ----------
 class TabSession {
-  constructor() { this.tabId = null; this.windowId = null; this.ownWindow = false; }
+  /** visible: janela normal sem foco (em vez de minimizada) — só na varredura manual, ver scan(). */
+  constructor({ visible = false } = {}) { this.tabId = null; this.windowId = null; this.ownWindow = false; this.visible = visible; }
 
   async open() {
     if (this.tabId != null) return;
     try {
-      const w = await chrome.windows.create({ url: 'about:blank', focused: false, state: 'minimized' });
+      const w = await chrome.windows.create(this.visible
+        ? { url: 'about:blank', focused: false, state: 'normal', width: 1024, height: 768 }
+        : { url: 'about:blank', focused: false, state: 'minimized' });
       this.windowId = w.id;
       this.tabId = w.tabs[0].id;
       this.ownWindow = true;
@@ -125,7 +128,7 @@ class TabSession {
     await chrome.scripting.executeScript({ target: { tabId: this.tabId }, files: ['lib/ml-parser.js'] });
     const [res] = await chrome.scripting.executeScript({
       target: { tabId: this.tabId },
-      func: (v) => globalThis.__radarExtract({ timeout: 6000, version: v }),
+      func: (v) => globalThis.__radarExtract({ timeout: 30000, version: v }), // espera inteligente, máx. 30 s
       args: [chrome.runtime.getManifest().version]
     });
     return res && res.result ? res.result : { items: [], diagnostic: null };
@@ -155,7 +158,7 @@ const NEEDS_USER = { verificacao: 'verificação de segurança', login: 'login',
 
 function compactDiag(d) {
   if (!d) return null;
-  return { tipoDePagina: d.tipoDePagina, estrategia: d.estrategia, anunciosLidos: d.anunciosLidos, status: d.status, url: d.url, titulo: d.titulo, tamanhoHtml: d.tamanhoHtml, elementos: d.elementos, porEstrategia: d.porEstrategia, classes: d.classes, origem: d.origem };
+  return { tipoDePagina: d.tipoDePagina, estrategia: d.estrategia, anunciosLidos: d.anunciosLidos, status: d.status, url: d.url, titulo: d.titulo, tamanhoHtml: d.tamanhoHtml, elementos: d.elementos, porEstrategia: d.porEstrategia, classes: d.classes, origem: d.origem, espera: d.espera };
 }
 
 /**
@@ -180,7 +183,7 @@ async function scan(mode) {
   const seenInScan = new Set();
   const byBase = new Map(); // resultado da página anterior de cada fonte
   const scanRec = { t: now0, mode, finished: null, sources: [], found: 0, newOffers: 0, stoppedReason: null };
-  const session = new TabSession();
+  let session = new TabSession();
   let tabBlocked = false, directFailStreak = 0;
   const state = (extra) => store.setRadarState({ running: true, mode, startedAt: now0, total: sources.length, done: scanRec.sources.length, found: scanRec.found, ...extra });
 
@@ -227,7 +230,17 @@ async function scan(mode) {
         try {
           await sleep(PAGE_DELAY_MS);
           await state({ message: `Lendo ${src.name} numa aba do navegador…`, current: src.name });
-          const r = await session.read(src.url);
+          let r = await session.read(src.url);
+          // Página presa no carregamento com a janela oculta: na varredura manual, tenta UMA vez
+          // numa janela normal sem foco (o Chrome pode pausar páginas ocultas). Nada é contornado.
+          const hiddenLoading = (x) => x.diagnostic && x.diagnostic.tipoDePagina === 'carregando' && x.diagnostic.espera && x.diagnostic.espera.visibilidadeFinal === 'hidden';
+          if (!r.items.length && hiddenLoading(r) && mode === 'manual' && !session.visible) {
+            await session.close();
+            session = new TabSession({ visible: true });
+            rec.retriedVisible = true;
+            await state({ message: `${src.name}: a página não carregou em segundo plano; tentando numa janela visível…`, current: src.name });
+            r = await session.read(src.url);
+          }
           rec.diagnostic = compactDiag(r.diagnostic);
           const kind = r.diagnostic && r.diagnostic.tipoDePagina;
           if (r.items.length) { items = r.items; rec.method = 'aba'; rec.directError = rec.error; rec.error = null; }
@@ -240,7 +253,9 @@ async function scan(mode) {
               const what = kind === 'bloqueio' ? 'O Mercado Livre bloqueou o acesso (comum com VPN, proxy ou rede de empresa).' : `O Mercado Livre pediu ${NEEDS_USER[kind]}.`;
               scanRec.needsUser = { tabId, kind, message: `${what} Resolva na janela aberta e clique em "Atualizar".` };
             }
-          } else rec.error = (rec.error ? rec.error + '; ' : '') + 'aba: nenhum anúncio reconhecido';
+          } else if (kind === 'carregando') {
+            rec.error = (rec.error ? rec.error + '; ' : '') + `aba: a página ficou carregando por ${Math.round(((r.diagnostic.espera && r.diagnostic.espera.ms) || 30000) / 1000)} s sem mostrar anúncios`;
+          } else rec.error = (rec.error ? rec.error + '; ' : '') + (kind === 'sem-resultados' ? 'aba: página sem resultados' : 'aba: layout desconhecido — nenhum anúncio reconhecido');
         } catch (e) {
           rec.error = (rec.error ? rec.error + '; ' : '') + 'aba: ' + (e.message || e);
         }

@@ -1,1 +1,1 @@
-{"name": "radar-de-ofertas", "private": true, "type": "module", "scripts": {"test": "node --test tests/*.test.js", "test:e2e": "node tests/browser.e2e.cjs", "test:e2e:tab": "node tests/tab.e2e.cjs", "test:e2e:radar": "node tests/radar.e2e.cjs"}}
+{"name": "radar-de-ofertas", "private": true, "type": "module", "scripts": {"test": "node --test tests/*.test.js", "test:e2e": "node tests/browser.e2e.cjs", "test:e2e:tab": "node tests/tab.e2e.cjs", "test:e2e:radar": "node tests/radar.e2e.cjs", "test:e2e:loading": "node tests/loading.e2e.cjs"}}

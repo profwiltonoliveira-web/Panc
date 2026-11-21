@@ -218,6 +218,55 @@
     return { items: out, scriptsWithPolycard, parsedObjects, parseErrors };
   }
 
+  // ---------- A2) Estado da página (Nordic / __PRELOADED_STATE__) em formato genérico ----------
+  // Alguns layouts trazem os resultados no estado da página sem a chave "polycard".
+  // Aceita só objetos com ID de anúncio (MLB…), título, preço numérico e link do ML.
+  function priceFrom(o) {
+    if (typeof o.price === 'number') return o.price;
+    if (o.price && typeof o.price === 'object') {
+      for (const k of ['amount', 'value', 'current']) if (typeof o.price[k] === 'number') return o.price[k];
+      if (o.price.current_price && typeof o.price.current_price.value === 'number') return o.price.current_price.value;
+    }
+    if (o.prices && Array.isArray(o.prices.prices)) { const p = o.prices.prices.find((x) => x && typeof x.amount === 'number'); if (p) return p.amount; }
+    return null;
+  }
+  function parseFromState(doc) {
+    const out = [];
+    let blocks = 0;
+    for (const s of doc.querySelectorAll('script')) {
+      const text = s.textContent || '';
+      const isState = s.id === '__NORDIC_RENDERING_CTX__' || s.id === '__PRELOADED_STATE__' || /^\s*_n\.ctx/.test(text) || (s.type === 'application/json' && text.includes('MLB'));
+      if (!isState || !/MLB\d{6,}/.test(text) || text.includes('"polycard"')) continue;
+      const start = text.indexOf('{');
+      const raw = start >= 0 ? sliceJsonObject(text, start) : null;
+      if (!raw) continue;
+      let data;
+      try { data = JSON.parse(raw); } catch { continue; }
+      blocks++;
+      let visited = 0;
+      (function walk(o, depth) {
+        if (!o || typeof o !== 'object' || depth > 14 || ++visited > 200000) return;
+        if (Array.isArray(o)) { for (const x of o) walk(x, depth + 1); return; }
+        if (typeof o.id === 'string' && /^MLB\d{6,}$/.test(o.id) && typeof o.title === 'string') {
+          const link = o.permalink || o.url || o.link;
+          const price = priceFrom(o);
+          if (link && price) {
+            const item = makeItem({
+              title: o.title, link: /^https?:/.test(link) ? link : 'https://' + String(link).replace(/^\/+/, ''),
+              price, originalPrice: typeof o.original_price === 'number' ? o.original_price : (o.price && typeof o.price.original_price === 'number' ? o.price.original_price : null),
+              ...(o.shipping && o.shipping.free_shipping ? { shipping: 0, freeShipping: true } : {}),
+              condition: o.condition === 'used' ? 'usado' : null,
+              image: o.thumbnail || (o.pictures && o.pictures[0] && o.pictures[0].url) || ''
+            });
+            if (item) { out.push(item); return; }
+          }
+        }
+        for (const k in o) walk(o[k], depth + 1);
+      })(data, 0);
+    }
+    return { items: out, blocks };
+  }
+
   // ---------- B) Cards do DOM ----------
   function firstCurrentAmount(box) {
     for (const el of box.querySelectorAll('.andes-money-amount')) {
@@ -331,10 +380,12 @@
    */
   function parseSearchDocument(doc) {
     const json = parseFromScripts(doc);
+    const state = json.items.length ? { items: [], blocks: 0 } : parseFromState(doc);
     const dom = parseFromCards(doc);
     const links = parseFromLinks(doc);
     let items = [], strategy = null;
     if (json.items.length) { items = json.items; strategy = 'json'; }
+    else if (state.items.length) { items = state.items; strategy = 'estado'; }
     else if (dom.length) { items = dom; strategy = 'dom'; }
     else if (links.length) { items = links; strategy = 'links'; }
     // Completa imagem/frete do JSON com o que o DOM mostrar para o mesmo anúncio.
@@ -351,8 +402,45 @@
     return {
       items: dedupe(items),
       strategy,
-      counts: { json: json.items.length, dom: dom.length, links: links.length, scriptsWithPolycard: json.scriptsWithPolycard, jsonParseErrors: json.parseErrors }
+      counts: { json: json.items.length, estado: state.items.length, dom: dom.length, links: links.length, scriptsWithPolycard: json.scriptsWithPolycard, jsonParseErrors: json.parseErrors, blocosDeEstado: state.blocks }
     };
+  }
+
+  // ---------- Estado da página ----------
+  // Indicadores de carregamento do ML (tela de carregamento da busca, spinners).
+  const LOADING_SEL = '.ui-search-loading-screen, [class*="loading-screen"], .andes-spinner, .ui-search-loading, [aria-busy="true"]';
+
+  /** Elemento visível? Em documento sem layout (DOMParser), a presença basta. */
+  function isShown(el) {
+    const win = el.ownerDocument && el.ownerDocument.defaultView;
+    if (!win || !win.getComputedStyle) return true;
+    const cs = win.getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 || r.height > 0;
+  }
+
+  function loadingIndicators(doc) {
+    let n = 0;
+    try { for (const el of doc.querySelectorAll(LOADING_SEL)) if (isShown(el)) n++; } catch { /* ignore */ }
+    return n;
+  }
+
+  /**
+   * Classifica a página. Estados: 'resultados', 'carregando', 'sem-resultados', 'verificacao',
+   * 'bloqueio', 'login', 'pagina-de-produto', 'desconhecida'.
+   */
+  function classifyPage(doc, parsed, url) {
+    const bodyText = clean(doc.body ? doc.body.textContent : '').toLowerCase();
+    const count = (s) => { try { return doc.querySelectorAll(s).length; } catch { return -1; } };
+    if (/account-verification|\/gz\/|captcha/i.test(url) || /captcha|verifica[cç][aã]o de seguran|confirme que voc[eê] n[aã]o [eé] um rob/.test(bodyText) || count('iframe[src*="captcha"], .g-recaptcha, #captcha') > 0) return 'verificacao';
+    if (/hubo un error accediendo|houve um erro ao acessar|access denied|acesso negado/.test(bodyText) && count('a[href]') < 15) return 'bloqueio';
+    if (parsed.items.length) return 'resultados';
+    if (/não há anúncios|nao ha anuncios|nenhum resultado|verifique se a palavra|não encontramos/.test(bodyText) || count('.ui-search-rescue, .ui-search-rescue__info') > 0) return 'sem-resultados';
+    if (/\/p\/MLB\d|\/MLB-\d/i.test(url) && !/lista\./.test(url)) return 'pagina-de-produto';
+    if (/login|registration|\/jms\/.*\/lgz/i.test(url)) return 'login';
+    if (loadingIndicators(doc) > 0) return 'carregando';
+    return 'desconhecida';
   }
 
   /**
@@ -361,17 +449,10 @@
   function diagnoseDocument(doc, meta) {
     meta = meta || {};
     const url = meta.finalUrl || (doc.location && doc.location.href) || '';
-    const bodyText = clean(doc.body ? doc.body.textContent : '').toLowerCase();
     const html = meta.htmlLength != null ? meta.htmlLength : (doc.documentElement ? doc.documentElement.outerHTML.length : 0);
     const count = (s) => { try { return doc.querySelectorAll(s).length; } catch { return -1; } };
-    let kind = 'desconhecida';
-    if (/account-verification|\/gz\/|captcha/i.test(url) || /captcha|verifica[cç][aã]o de seguran|confirme que voc[eê] n[aã]o [eé] um rob/.test(bodyText) || count('iframe[src*="captcha"], .g-recaptcha, #captcha') > 0) kind = 'verificacao';
-    else if (/hubo un error accediendo|houve um erro ao acessar|access denied|acesso negado/.test(bodyText) && count('a[href]') < 15) kind = 'bloqueio';
-    else if (/não há anúncios|nao ha anuncios|nenhum resultado|verifique se a palavra|não encontramos/.test(bodyText)) kind = 'sem-resultados';
-    else if (/\/p\/MLB\d|\/MLB-\d/i.test(url) && !/lista\./.test(url)) kind = 'pagina-de-produto';
-    else if (/login|registration|\/jms\/.*\/lgz/i.test(url)) kind = 'login';
     const parsed = meta.parsed || parseSearchDocument(doc);
-    if (parsed.items.length && kind === 'desconhecida') kind = 'resultados';
+    const kind = classifyPage(doc, parsed, url);
     // Classes mais frequentes relacionadas à busca, para ajustar seletores.
     const freq = {};
     for (const el of doc.querySelectorAll('[class]')) {
@@ -401,9 +482,11 @@
         scriptsComPolycard: scripts.filter((s) => (s.textContent || '').includes('"polycard"')).length,
         jsonLd: count('script[type="application/ld+json"]'),
         estadoNordic: scripts.filter((s) => /__NORDIC_RENDERING_CTX__|_n\.ctx/.test(s.id + (s.textContent || '').slice(0, 200))).length,
-        estadoPreloaded: count('#__PRELOADED_STATE__')
+        estadoPreloaded: count('#__PRELOADED_STATE__'),
+        telaDeCarregamento: loadingIndicators(doc)
       },
-      classes: topClasses
+      classes: topClasses,
+      ...(meta.espera ? { espera: meta.espera } : {})
     };
   }
 
@@ -422,24 +505,77 @@
     return '';
   }
 
-  const api = { parseSearchDocument, diagnoseDocument, queryFromDocument, idFromUrl, safeLink, safeImage, parseBRL, sliceJsonObject, polycardToItem };
+  const api = { parseSearchDocument, diagnoseDocument, classifyPage, loadingIndicators, queryFromDocument, idFromUrl, safeLink, safeImage, parseBRL, sliceJsonObject, polycardToItem };
   globalThis.RadarML = api;
 
-  // Na aba do ML: espera os anúncios aparecerem (a página pode renderizar via JS) e devolve resultado + diagnóstico.
-  globalThis.__radarExtract = async function (opts) {
-    const timeout = (opts && opts.timeout) || 8000;
+  // ---------- Espera inteligente na aba do ML ----------
+  // A página de busca do ML mostra uma tela de carregamento e só depois monta os anúncios
+  // via JavaScript. Em vez de esperar um tempo fixo, o leitor:
+  //   - observa mudanças no DOM (MutationObserver) e reavalia logo após cada lote de mudanças;
+  //   - verifica periodicamente (1 s), para o caso de a página mudar sem mutações observáveis;
+  //   - termina assim que houver anúncios ou um estado final (sem resultados, verificação,
+  //     bloqueio, login, página de produto);
+  //   - "layout desconhecido" só depois que a página parar de carregar (sem indicador de
+  //     carregamento e sem mutações por SETTLE_MS);
+  //   - limite máximo: 30 s (estado final "carregando" se ainda estiver carregando).
+  // Também mede quadros de animação e visibilidade: em aba/janela em segundo plano o Chrome
+  // pausa requestAnimationFrame, o que pode impedir a página de montar os anúncios.
+  const MAX_WAIT_MS = 30000;
+  const SETTLE_MS = 5000;
+  const FINAL = new Set(['resultados', 'sem-resultados', 'verificacao', 'bloqueio', 'login', 'pagina-de-produto']);
+
+  globalThis.__radarExtract = function (opts) {
+    opts = opts || {};
+    const maxWait = Math.min(opts.timeout || MAX_WAIT_MS, MAX_WAIT_MS);
+    const settle = opts.settleMs || SETTLE_MS;
     const t0 = Date.now();
-    let parsed = parseSearchDocument(document);
-    while (!parsed.items.length && Date.now() - t0 < timeout) {
-      const d = diagnoseDocument(document, { parsed });
-      if (d.tipoDePagina === 'verificacao' || d.tipoDePagina === 'sem-resultados') break;
-      await new Promise((r) => setTimeout(r, 500));
-      parsed = parseSearchDocument(document);
-    }
-    return {
-      items: parsed.items,
-      query: queryFromDocument(document),
-      diagnostic: diagnoseDocument(document, { parsed, origin: 'aba', version: opts && opts.version })
-    };
+    let lastMutation = t0, mutations = 0, checks = 0, frames = 0, done = false;
+    let firstLoadingAt = null, loadingSeenMs = 0, lastCheckAt = t0;
+    const visibilityAtStart = document.visibilityState;
+
+    return new Promise((resolve) => {
+      let debounce = null;
+      const obs = new MutationObserver((list) => {
+        mutations += list.length;
+        lastMutation = Date.now();
+        clearTimeout(debounce);
+        debounce = setTimeout(check, 250);
+      });
+      try { obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-busy'] }); } catch { /* ignore */ }
+      const tick = setInterval(check, 1000);
+      const raf = () => { frames++; if (!done) requestAnimationFrame(raf); };
+      try { requestAnimationFrame(raf); } catch { /* ignore */ }
+
+      function finish(parsed, kind) {
+        if (done) return;
+        done = true;
+        clearInterval(tick); clearTimeout(debounce); obs.disconnect();
+        const now = Date.now();
+        const espera = {
+          ms: now - t0, verificacoes: checks, mutacoes: mutations, quadrosDeAnimacao: frames,
+          visibilidadeInicial: visibilityAtStart, visibilidadeFinal: document.visibilityState,
+          readyState: document.readyState, telaDeCarregamentoVistaMs: loadingSeenMs,
+          estadoFinal: kind, limiteMs: maxWait
+        };
+        const diagnostic = diagnoseDocument(document, { parsed, origin: 'aba', version: opts.version, espera });
+        diagnostic.tipoDePagina = kind; // estado observado ao fim da espera
+        resolve({ items: parsed.items, query: queryFromDocument(document), diagnostic });
+      }
+
+      function check() {
+        if (done) return;
+        checks++;
+        const now = Date.now();
+        const parsed = parseSearchDocument(document);
+        const kind = classifyPage(document, parsed, location.href);
+        if (kind === 'carregando') { if (firstLoadingAt == null) firstLoadingAt = now; loadingSeenMs += now - lastCheckAt; }
+        lastCheckAt = now;
+        if (FINAL.has(kind)) return finish(parsed, kind);
+        if (now - t0 >= maxWait) return finish(parsed, kind); // 'carregando' ou 'desconhecida' no limite
+        // Página parou (sem indicador de carregamento, documento completo, DOM quieto): layout desconhecido.
+        if (kind === 'desconhecida' && document.readyState === 'complete' && now - lastMutation >= settle && now - t0 >= settle) return finish(parsed, kind);
+      }
+      check();
+    });
   };
 })();

@@ -58,7 +58,7 @@ export async function extractFromTab(tabId) {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['lib/ml-parser.js'] });
     const [res] = await chrome.scripting.executeScript({
       target: { tabId },
-      func: (v) => globalThis.__radarExtract({ timeout: 8000, version: v }),
+      func: (v) => globalThis.__radarExtract({ timeout: 30000, version: v }), // espera inteligente, máx. 30 s
       args: [version]
     });
     if (!res || !res.result) throw new Error('a aba não devolveu resposta');
@@ -80,6 +80,13 @@ function checkResult(r, tabId) {
   }
   if (d.tipoDePagina === 'bloqueio') {
     throw new TabReadError('O Mercado Livre bloqueou o acesso a esta página ("Hubo un error accediendo a esta pagina"). Isso costuma acontecer com VPN, proxy, rede corporativa ou excesso de acessos. Abra mercadolivre.com.br normalmente, faça a busca no site e clique em "Ler aba do ML".', { diagnostic: d, tabId, needsUser: true });
+  }
+  if (d.tipoDePagina === 'carregando') {
+    const hidden = d.espera && d.espera.visibilidadeFinal === 'hidden';
+    throw new TabReadError(
+      `A página do Mercado Livre ficou na tela de carregamento por ${Math.round(((d.espera && d.espera.ms) || 30000) / 1000)} s sem mostrar anúncios.` +
+      (hidden ? ' A aba estava em segundo plano, e o Chrome pode pausar a montagem da página nessa situação. Clique em "Ir para a aba do ML"; quando os anúncios aparecerem, clique em "Ler aba do ML".' : ' Verifique a conexão e tente de novo.'),
+      { diagnostic: d, tabId, needsUser: hidden });
   }
   if (d.tipoDePagina === 'sem-resultados') {
     throw new TabReadError('O Mercado Livre não encontrou anúncios para esse termo.', { diagnostic: d, tabId });

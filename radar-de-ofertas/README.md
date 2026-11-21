@@ -1,4 +1,4 @@
-# Radar de Ofertas — caçador automático de promoções (v0.5.0)
+# Radar de Ofertas — caçador automático de promoções (v0.5.1)
 
 Extensão do Google Chrome (Manifest V3, JavaScript puro, sem backend e sem serviços pagos) que **descobre automaticamente** ofertas no Mercado Livre por categoria, registra os preços observados, **pontua as oportunidades** e gera um texto pronto para divulgar em grupos de promoções.
 
@@ -52,6 +52,20 @@ Somente páginas **públicas** do Mercado Livre, consultadas como um navegador c
 - Se o ML mostrar **verificação de segurança, login ou bloqueio**, a varredura **para de usar a aba**, registra o motivo e, na varredura manual, deixa a janela aberta com o botão **Ir para a janela do Mercado Livre**. Você resolve lá e clica em **Atualizar**.
 - Fontes bloqueadas entram em **pausa de 6 h** no monitoramento automático.
 - Se a leitura direta falhar em 3 fontes seguidas sem alternativa, a varredura é interrompida.
+
+### Carregamento dinâmico (v0.5.1)
+A página de busca do ML abre com uma **tela de carregamento** (`ui-search-loading-screen`) e só depois monta os anúncios via JavaScript. Um diagnóstico real da v0.5.0 mostrou exatamente isso: HTML de cerca de 988 mil caracteres, 5 blocos de estado "Nordic", tela de carregamento e 0 cards.
+- **Leitura direta:** não executa JavaScript, então nesse caso o diagnóstico mostra `carregando` e o Radar passa para a aba. Antes, mesmo assim, ele procura anúncios no estado da página (estratégia `estado`).
+- **Leitura na aba:** espera inteligente, sem tempo fixo:
+  - um `MutationObserver` reavalia a página logo após cada lote de mudanças, e uma verificação periódica roda a cada 1 s;
+  - termina assim que houver anúncios ou um estado final;
+  - o limite máximo é de **30 s**.
+- **Estados detectados:** `resultados`, `carregando` (ainda na tela de carregamento no limite), `sem-resultados`, `verificacao`, `bloqueio`, `login`, `pagina-de-produto` e `desconhecida`. "Layout desconhecido" só é concluído quando a página **para** de mudar por 5 s sem indicador de carregamento.
+- O diagnóstico ganha o bloco `espera`: tempo, número de verificações e de mutações, quadros de animação, visibilidade da aba, tempo com tela de carregamento e estado final.
+- **Aba em segundo plano:** o Chrome pode pausar a montagem da página.
+  - Na **busca manual**, se a página ficar carregando com a aba oculta, aparece **Ir para a aba do ML**. Quando os anúncios aparecerem, clique em **Ler aba do ML**.
+  - Na **varredura manual do radar**, a fonte é tentada **uma vez** numa janela normal sem foco.
+  - O monitoramento automático usa só a janela minimizada.
 
 ## 4. Dados coletados por oferta
 Título, preço atual, preço "de" anunciado (se houver), imagem (só do CDN `mlstatic.com`), vendedor/loja, se é **loja oficial**, avaliação (quando o card mostra), selos do ML (oferta do dia, relâmpago, mais vendido), frete grátis, condição, link e categoria.
@@ -155,6 +169,7 @@ npm test                 # testes unitários: preços, equivalência, pontuaçã
 npm run test:e2e:radar   # radar completo no Chromium
 npm run test:e2e         # busca manual
 npm run test:e2e:tab     # leitura pela aba (busca manual)
+npm run test:e2e:loading # v0.5.1: carregamento dinâmico (tela de carregamento, atrasos, nunca carrega, bloqueio, sem resultados, verificação, layout desconhecido, estado Nordic)
 ```
 Os testes e2e usam **rede simulada com páginas sintéticas** (servidor HTTPS local). **Eles não provam que a coleta funciona no site real.**
 
