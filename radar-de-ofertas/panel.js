@@ -3,7 +3,7 @@
 // envia comandos e acompanha o progresso pelo chrome.storage.
 
 import { CATEGORIES, CATEGORY_BY_ID, GROUPS } from './lib/categories.js';
-import { BRANDS, resolveBrand, slug as brandSlug } from './lib/brands.js';
+import { SUGGESTIONS, resolveBrand, normalizeBrand, slug as brandSlug } from './lib/brands.js';
 import { classificationReport } from './lib/report.js';
 import { scoreAll, shareText, LABEL_RANK, cleanLink, fmt, DEFAULT_WEIGHTS, WEIGHT_LABELS, normalizeWeights } from './lib/scoring.js';
 import * as store from './lib/storage.js';
@@ -209,7 +209,7 @@ function offerCard(o) {
     ` (${o.peers} equivalente${o.peers === 1 ? '' : 's'})`;
   const tags = [];
   if (o.accessory) tags.push('acessório');
-  for (const [b, m] of Object.entries(o.brands || {})) tags.push(`${(BRANDS[b] || { name: b }).name}${m === 'compativel' ? ' (compatível, terceiros)' : m === 'oficial' ? ' (loja oficial)' : ''}`);
+  for (const [b, m] of Object.entries(o.brands || {})) tags.push(`${brandName(b)}${m === 'compativel' ? ' (compatível, terceiros)' : m === 'oficial' ? ' (loja oficial)' : ''}`);
   for (const b of o.badges || []) tags.push(b.toLowerCase());
   node.querySelector('.o-tags').textContent = tags.join(' · ');
   const why = node.querySelector('.why ul');
@@ -251,7 +251,7 @@ function renderHighlights() {
     ['Descontos comprovados', 'preço abaixo da média que o Radar já observou neste anúncio', scored.filter((o) => o.discountKind === 'comprovado')],
     ['Preços excepcionais', '≥ 25% abaixo de anúncios equivalentes', scored.filter((o) => o.label !== 'suspeito' && o.priceInfo && o.priceInfo.signals.includes('preco-excepcional'))],
     ['Boas oportunidades', 'classe boa ou excelente', scored.filter((o) => o.label === 'boa' || o.label === 'excelente')],
-    ['Achados de marcas monitoradas', monitored.size ? [...monitored].map((b) => (BRANDS[b] || { name: b }).name).join(', ') : 'nenhuma marca monitorada — ative em Busca manual → Marca', scored.filter((o) => o.label !== 'suspeito' && Object.keys(o.brands || {}).some((b) => monitored.has(b) && o.brands[b] !== 'compativel'))]
+    ['Achados de marcas monitoradas', monitored.size ? [...monitored].map(brandName).join(', ') : 'nenhuma marca monitorada — ative em Busca manual → Marca', scored.filter((o) => o.label !== 'suspeito' && Object.keys(o.brands || {}).some((b) => monitored.has(b) && o.brands[b] !== 'compativel'))]
   ];
   $('#highlights').replaceChildren(...sections.map(([title, hint, list]) => {
     const sec = el('section', 'hl-section');
@@ -311,6 +311,7 @@ async function refresh() {
   const r = await store.getRadar();
   watch = r.watch;
   settingsCache = await store.getSettings();
+  userBrands = (await store.getBrandData()).brands;
   scored = scoreAll(Object.values(r.offers), r.prices, Date.now(), weights);
   renderState(r.radarState, r.scans);
   renderJobStatus(r.radarState);
@@ -346,7 +347,7 @@ async function renderAudit() {
 let pending = null;
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (!['offers', 'radarState', 'scans', 'watch', 'prices', 'sourceStats', 'brandFavs', 'customBrands', 'brandSearches', 'settings'].some((k) => k in changes)) return;
+  if (!['offers', 'radarState', 'scans', 'watch', 'prices', 'sourceStats', 'brandFavs', 'brands', 'brandSearches', 'settings'].some((k) => k in changes)) return;
   clearTimeout(pending);
   pending = setTimeout(refresh, 250); // agrupa várias gravações seguidas
 });
@@ -361,6 +362,8 @@ document.addEventListener('radar:tab', (e) => {
 
 // =================== v0.6: modalidades de busca (Produto / Marca / Categoria) ===================
 let settingsCache = {};
+let userBrands = {}; // cadastro do usuário (chrome.storage "brands")
+const brandName = (id) => (userBrands[id] || SUGGESTIONS[id] || { name: id }).name;
 let currentBrand = null;   // id da marca exibida
 let currentCategory = null;
 
@@ -383,8 +386,16 @@ function chip(text, on, onClick, title) {
 async function brandInputSpec() {
   const v = $('#brandInput').value.trim();
   if (!v) return null;
-  const { customBrands } = await store.getBrandData();
-  return resolveBrand(v, customBrands);
+  const { brands } = await store.getBrandData();
+  return resolveBrand(v, brands); // qualquer nome: cadastro, sugestão ou marca livre
+}
+
+/** Garante a marca no cadastro (ao favoritar/monitorar uma marca digitada ou sugerida). */
+async function ensureRegistered(b) {
+  if (b.registered) return b.id;
+  const n = normalizeBrand({ name: b.name, aliases: (b.aliases || []).filter((a) => typeof a === 'string'), terms: b.terms || [] });
+  if (!n.ok) throw new Error(n.error);
+  return (await store.saveBrand(b.id, n.brand)).id;
 }
 
 $('#brandSearch').addEventListener('click', async () => {
@@ -396,21 +407,70 @@ $('#brandSearch').addEventListener('click', async () => {
   renderBrandMode();
 });
 $('#brandInput').addEventListener('change', async () => { const b = await brandInputSpec(); if (b) { currentBrand = b.id; renderBrandMode(); } });
+// Enquanto digita: favoritar/monitorar refletem a marca DIGITADA (não a anterior).
+let brandTyping = null;
+$('#brandInput').addEventListener('input', () => {
+  clearTimeout(brandTyping);
+  brandTyping = setTimeout(async () => {
+    const b = await brandInputSpec();
+    const { brandFavs } = await store.getBrandData();
+    $('#brandFav').textContent = b && brandFavs.includes(b.id) ? '★ Favorita' : '☆ Favoritar';
+    if (!monitorIntent) $('#brandMonitor').checked = !!(b && (settingsCache.monitorBrands || []).includes(b.id));
+  }, 150);
+});
 $('#brandFav').addEventListener('click', async () => {
   const b = await brandInputSpec();
   if (!b) return;
-  if (!b.known) await store.saveCustomBrand(b.id, b); // marca digitada vira "minha marca"
-  await store.toggleBrandFav(b.id);
+  await store.toggleBrandFav(await ensureRegistered(b)); // marca digitada/sugerida entra em "Minhas marcas"
   renderBrandMode();
 });
+// Intenção do clique em "Monitorar" enquanto o salvamento não termina: impede que um redesenho
+// (ex.: o "change" do campo ao perder o foco) desfaça o clique na tela.
+let monitorIntent = null;
 $('#brandMonitor').addEventListener('change', async (e) => {
+  monitorIntent = { input: $('#brandInput').value.trim(), value: e.target.checked };
   const b = await brandInputSpec();
-  if (!b) { e.target.checked = false; return; }
-  if (!b.known) await store.saveCustomBrand(b.id, b);
-  const s = await store.getSettings();
-  const set = new Set(s.monitorBrands || []);
-  if (e.target.checked) set.add(b.id); else set.delete(b.id);
-  await store.saveSettings({ monitorBrands: [...set] });
+  if (!b) { e.target.checked = false; monitorIntent = null; return; }
+  try {
+    const on = monitorIntent.value;
+    const id = on ? await ensureRegistered(b) : b.id;
+    settingsCache.monitorBrands = await store.setBrandMonitor(id, on); // várias marcas ao mesmo tempo
+  } finally {
+    monitorIntent = null;
+    renderBrandMode();
+  }
+});
+
+// ---------- Cadastro de marcas (criar / editar / excluir) ----------
+function fillForm(id) {
+  const b = id ? userBrands[id] : null;
+  $('#bfId').value = id || '';
+  $('#bfName').value = b ? b.name : ($('#brandInput').value.trim() || '');
+  $('#bfAliases').value = b ? b.aliases.filter((a) => a !== b.aliases[0]).join(', ') : '';
+  $('#bfTerms').value = b ? b.terms.join(', ') : '';
+  $('#bfSave').textContent = id ? 'Salvar alterações' : 'Cadastrar marca';
+  $('#bfCancel').hidden = !id;
+  $('#bfMsg').textContent = ''; $('#bfMsg').className = 'muted';
+  $('#brandManager').open = true;
+}
+$('#bfCancel').addEventListener('click', () => fillForm(null));
+$('#brandForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('#bfMsg');
+  const n = normalizeBrand({ name: $('#bfName').value, aliases: $('#bfAliases').value, terms: $('#bfTerms').value });
+  if (!n.ok) { msg.textContent = n.error; msg.className = 'error'; return; }
+  try {
+    const editing = $('#bfId').value;
+    const { id, created } = await store.saveBrand(editing || brandSlug(n.brand.name), n.brand, { mode: editing ? 'edit' : 'create' });
+    msg.textContent = created ? `"${n.brand.name}" cadastrada.` : `"${n.brand.name}" atualizada.`;
+    msg.className = 'muted';
+    $('#bfId').value = ''; $('#bfName').value = ''; $('#bfAliases').value = ''; $('#bfTerms').value = '';
+    $('#bfSave').textContent = 'Cadastrar marca'; $('#bfCancel').hidden = true;
+    userBrands = (await store.getBrandData()).brands;
+    currentBrand = id;
+    $('#brandInput').value = n.brand.name;
+    renderBrandMode();
+  } catch (err) { msg.textContent = err.message || String(err); msg.className = 'error'; }
 });
 ['#bCat', '#bLabel', '#bCompat', '#bSort'].forEach((x) => $(x).addEventListener('change', renderBrandResults));
 ['#bMin', '#bMax'].forEach((x) => $(x).addEventListener('input', renderBrandResults));
@@ -430,15 +490,50 @@ function renderJobStatus(st) {
 }
 
 async function renderBrandMode() {
-  const { brandFavs, customBrands, brandSearches } = await store.getBrandData();
-  const reg = { ...BRANDS, ...customBrands };
-  $('#brandList').replaceChildren(...Object.values(reg).map((b) => { const o = el('option'); o.value = b.name; return o; }));
-  const pick = (id) => { $('#brandInput').value = (reg[id] || { name: id }).name; currentBrand = id; renderBrandMode(); };
-  $('#brandFavs').replaceChildren(...(brandFavs.length ? brandFavs.map((id) => chip('★ ' + (reg[id] || { name: id }).name, id === currentBrand, () => pick(id))) : [el('span', 'muted', 'nenhuma')]));
-  $('#myBrands').replaceChildren(...Object.entries(reg).map(([id, b]) => chip(b.name, id === currentBrand, () => pick(id), customBrands[id] ? 'marca adicionada por você' : 'marca cadastrada')));
+  const { brandFavs, brands, brandSearches } = await store.getBrandData();
+  userBrands = brands;
+  const monitored = settingsCache.monitorBrands || [];
+  // datalist: cadastro + sugestões (o campo aceita QUALQUER texto mesmo assim)
+  const names = [...new Set([...Object.values(brands), ...Object.values(SUGGESTIONS)].map((b) => b.name))];
+  $('#brandList').replaceChildren(...names.map((n) => { const o = el('option'); o.value = n; return o; }));
+  const pick = (id) => { $('#brandInput').value = brandName(id); currentBrand = id; renderBrandMode(); };
+  $('#brandFavs').replaceChildren(...(brandFavs.length ? brandFavs.map((id) => chip('★ ' + brandName(id), id === currentBrand, () => pick(id))) : [el('span', 'muted', 'nenhuma')]));
+  $('#brandMonitored').replaceChildren(...(monitored.length ? monitored.map((id) => chip(brandName(id) + ' ✕', false, async () => { settingsCache.monitorBrands = await store.setBrandMonitor(id, false); renderBrandMode(); }, 'parar de monitorar')) : [el('span', 'muted', 'nenhuma')]));
+  // sugestões: só preenchem o campo de busca (atalhos), não são cadastro
+  $('#brandSuggestions').replaceChildren(...Object.entries(SUGGESTIONS).map(([id, b]) => chip(b.name, id === currentBrand, () => { $('#brandInput').value = b.name; currentBrand = id; renderBrandMode(); }, 'atalho: preenche a busca')));
+  // cadastro do usuário
+  const regIds = Object.keys(brands).sort((a, c) => brands[a].name.localeCompare(brands[c].name));
+  $('#brandRegistry').replaceChildren(...(regIds.length ? regIds.map((id) => {
+    const b = brands[id];
+    const li = el('li', 'brand-row');
+    const g = el('div', 'grow');
+    const nm = el('button', 'link', b.name);
+    nm.addEventListener('click', () => pick(id));
+    g.append(nm, el('div', 'sub', `apelidos: ${b.aliases.join(', ') || '—'} · linhas: ${b.terms.join(', ') || 'descobertas automaticamente'}`));
+    const act = el('div', 'actions');
+    act.append(chip(brandFavs.includes(id) ? '★ favorita' : '☆ favoritar', brandFavs.includes(id), async () => { await store.toggleBrandFav(id); renderBrandMode(); }));
+    const mon = el('label');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = monitored.includes(id); cb.className = 'reg-monitor'; cb.dataset.id = id;
+    cb.addEventListener('change', async () => { settingsCache.monitorBrands = await store.setBrandMonitor(id, cb.checked); renderBrandMode(); });
+    mon.append(cb, document.createTextNode('monitorar'));
+    const ed = el('button', 'ghost', 'Editar'); ed.type = 'button'; ed.addEventListener('click', () => fillForm(id));
+    const del = el('button', 'ghost danger', 'Excluir'); del.type = 'button';
+    del.addEventListener('click', async () => {
+      if (!confirm(`Excluir a marca "${b.name}" do cadastro? Ela sai dos favoritos e do monitoramento. As ofertas já encontradas continuam.`)) return;
+      await store.deleteBrand(id);
+      settingsCache = await store.getSettings();
+      renderBrandMode();
+    });
+    act.append(mon, ed, del);
+    li.append(g, act);
+    return li;
+  }) : [el('li', 'empty', 'Nenhuma marca cadastrada. Use o formulário acima, ou favorite/monitore uma marca pesquisada.')]));
+  if (!$('#bfId').value && !$('#bfName').value && $('#brandInput').value.trim() && !brands[brandSlug($('#brandInput').value)]) $('#bfName').placeholder = $('#brandInput').value.trim();
   const b = await brandInputSpec();
   $('#brandFav').textContent = b && brandFavs.includes(b.id) ? '★ Favorita' : '☆ Favoritar';
-  $('#brandMonitor').checked = !!(b && (settingsCache.monitorBrands || []).includes(b.id));
+  $('#brandMonitor').checked = monitorIntent && monitorIntent.input === $('#brandInput').value.trim()
+    ? monitorIntent.value
+    : !!(b && (settingsCache.monitorBrands || []).includes(b.id));
   $('#brandHistory').replaceChildren(...(brandSearches.length ? brandSearches.slice(0, 20).map((h) => {
     const li = el('li');
     const g = el('div', 'grow');
@@ -471,7 +566,7 @@ function renderBrandResults() {
   const sort = $('#bSort').value;
   list.sort(sort === 'price' ? (a, b) => a.price - b.price : sort === '-price' ? (a, b) => b.price - a.price : (a, b) => b.score - a.score);
   const own = all.filter((o) => o.brands[id] !== 'compativel').length;
-  const name = (BRANDS[id] || { name: $('#brandInput').value || id }).name;
+  const name = userBrands[id] || SUGGESTIONS[id] ? brandName(id) : ($('#brandInput').value || id);
   $('#brandSummary').textContent = `${name}: ${own} produto(s) da marca e ${all.length - own} acessório(s) compatível(is) de terceiros encontrados · mostrando ${list.length}. Organizados por categoria.`;
   const groups = new Map();
   for (const o of list) { if (!groups.has(o.category)) groups.set(o.category, []); groups.get(o.category).push(o); }

@@ -1,5 +1,12 @@
-// Busca por marca: cadastro de marcas (expansível), consultas por linha de produto e
+// Busca por marca: QUALQUER marca (cadastrada ou não), consultas por linha de produto e
 // verificação de que o anúncio é REALMENTE da marca.
+//
+// - A busca NÃO depende de cadastro: qualquer nome digitado é pesquisado (as linhas de produto
+//   são descobertas pelos títulos encontrados).
+// - O cadastro do usuário (chrome.storage, chave "brands") permite criar, editar e excluir marcas,
+//   com apelidos (ex.: Xiaomi → redmi, poco) e linhas de produto.
+// - SUGGESTIONS são só atalhos populares: não limitam nem substituem o cadastro.
+// - Apelidos são texto (salváveis). "moto*" = a palavra "moto" seguida de um modelo (g54, e13, edge…).
 //
 // Classificação de cada anúncio em relação à marca buscada:
 //   oficial      vendido pela loja oficial da marca (vendedor = marca)
@@ -16,15 +23,15 @@ import { categorize } from './categories.js';
 
 const LISTA = 'https://lista.mercadolivre.com.br/';
 
-// term → categoria do Radar (usada para organizar os resultados quando o título não basta)
-export const BRANDS = {
+// Sugestões populares (ATALHOS). Não são uma lista fechada: qualquer marca pode ser pesquisada.
+export const SUGGESTIONS = {
   nike: { name: 'Nike', aliases: ['nike'], terms: ['tenis', 'camiseta', 'bermuda', 'mochila', 'bone', 'jaqueta', 'chuteira', 'meia'] },
   adidas: { name: 'Adidas', aliases: ['adidas'], terms: ['tenis', 'camiseta', 'calca', 'mochila', 'chuteira', 'jaqueta', 'bola'] },
   samsung: { name: 'Samsung', aliases: ['samsung'], terms: ['celular', 'smart tv', 'tablet', 'geladeira', 'lava e seca', 'fone', 'monitor', 'smartwatch'] },
   jbl: { name: 'JBL', aliases: ['jbl'], terms: ['fone', 'caixa de som', 'soundbar', 'headset', 'partybox'] },
   xiaomi: { name: 'Xiaomi', aliases: ['xiaomi', 'redmi', 'poco'], terms: ['celular', 'smartwatch', 'fone', 'aspirador robo', 'mi band', 'tv box', 'patinete'] },
   mondial: { name: 'Mondial', aliases: ['mondial'], terms: ['ventilador', 'air fryer', 'liquidificador', 'batedeira', 'cafeteira', 'ferro de passar', 'chaleira'] },
-  motorola: { name: 'Motorola', aliases: ['motorola', /^moto$/], terms: ['celular', 'moto g', 'moto edge', 'fone', 'carregador'] },
+  motorola: { name: 'Motorola', aliases: ['motorola', 'moto*'], terms: ['celular', 'moto g', 'moto edge', 'fone', 'carregador'] },
   philips: { name: 'Philips', aliases: ['philips'], terms: ['air fryer', 'barbeador', 'aparador', 'secador', 'fone', 'liquidificador', 'monitor', 'lampada'] },
   electrolux: { name: 'Electrolux', aliases: ['electrolux'], terms: ['geladeira', 'fogao', 'micro-ondas', 'lava e seca', 'aspirador', 'purificador', 'air fryer'] },
   lg: { name: 'LG', aliases: ['lg'], terms: ['smart tv', 'geladeira', 'lava e seca', 'micro-ondas', 'monitor', 'ar condicionado', 'soundbar'] },
@@ -41,26 +48,72 @@ const COMPAT_BEFORE = new Set(['para', 'compativel', 'p', 'pra', 'com', 'serve',
 const IMITATION = new Set(['tipo', 'estilo', 'similar', 'inspirado', 'inspirada', 'replica', 'imitacao', 'linha', 'modelo']);
 const KNOWN_BRANDS = new Set(BRAND_LIST);
 
-export const slug = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+export const slug = (s) => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-/** Marca cadastrada (padrão ou personalizada) ou marca digitada livremente. */
-export function resolveBrand(input, custom = {}) {
+/**
+ * Normaliza e valida uma marca vinda do cadastro/formulário.
+ * name: 2–60 caracteres; aliases: palavras extras que identificam a marca no título;
+ * terms: linhas de produto pesquisadas (até 12).
+ * @returns {{ ok: true, brand } | { ok: false, error }}
+ */
+export function normalizeBrand(input) {
+  const name = String((input && input.name) || '').trim().replace(/\s+/g, ' ');
+  if (name.length < 2 || name.length > 60) return { ok: false, error: 'Informe um nome de marca com 2 a 60 caracteres.' };
+  const tk = tokens(name);
+  if (!tk.length) return { ok: false, error: 'O nome da marca precisa ter letras ou números.' };
+  const list = (v) => (Array.isArray(v) ? v : String(v || '').split(','))
+    .map((x) => String(x).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+    .filter(Boolean);
+  const aliases = [...new Set([tk.join(''), ...list(input.aliases).map((a) => (a.endsWith('*') ? tokens(a).join('') + '*' : tokens(a).join('')) ).filter((a) => a && a !== '*')])];
+  const terms = [...new Set(list(input.terms).map((t) => tokens(t).join(' ')).filter(Boolean))].slice(0, 12);
+  return { ok: true, brand: { name, aliases, phrase: tk.join(' '), terms } };
+}
+
+/**
+ * Resolve o texto digitado para uma marca: cadastro do usuário (por id, nome ou apelido) →
+ * sugestão popular → QUALQUER outro nome (marca livre, sem cadastro).
+ * @param registry cadastro do usuário { id: { name, aliases, terms } }
+ */
+export function resolveBrand(input, registry = {}) {
   const id = slug(input);
-  const all = { ...BRANDS, ...custom };
-  if (all[id]) return { id, ...all[id], known: true };
-  for (const [k, b] of Object.entries(all)) if (slug(b.name) === id) return { id: k, ...b, known: true };
+  const key = tokens(input).join('');
+  for (const src of [registry, SUGGESTIONS]) {
+    if (src[id]) return { id, ...src[id], known: true, registered: src === registry };
+    for (const [k, b] of Object.entries(src)) {
+      if (slug(b.name) === id || (b.aliases || []).some((a) => typeof a === 'string' && a.replace(/\*$/, '') === key)) return { id: k, ...b, known: true, registered: src === registry };
+    }
+  }
   const name = String(input).trim();
   const tk = tokens(name);
   // Marca de várias palavras ("Black Decker"): casa a frase inteira ou a forma colada ("blackdecker").
-  return { id, name, aliases: [tk.join('')], phrase: tk.join(' '), terms: [], known: false };
+  return { id, name, aliases: [tk.join('')], phrase: tk.join(' '), terms: [], known: false, registered: false };
 }
+
+/** Palavras que identificam OUTRAS marcas (lista base + cadastro + sugestões), exceto a buscada. */
+export function otherBrandWords(brand, registry = {}) {
+  const own = new Set((brand.aliases || []).map((a) => String(a).replace(/\*$/, '')));
+  const out = new Set(KNOWN_BRANDS);
+  for (const b of [...Object.values(SUGGESTIONS), ...Object.values(registry)]) {
+    for (const a of b.aliases || []) out.add(String(a).replace(/\*$/, ''));
+    const tk = tokens(b.name);
+    if (tk.length === 1) out.add(tk[0]);
+  }
+  for (const a of own) out.delete(a);
+  return out;
+}
+
+// Depois de um apelido com "*": precisa parecer modelo (letra+número curto: "g54", "e13", "g"),
+// ou uma linha conhecida. "Baú para moto 45 litros" NÃO conta (45 sozinho não é modelo).
+const MODEL_NEXT = (t) => /^[a-z]{1,2}\d{0,3}[a-z]?$/.test(t || '') && /\d|^[a-z]$/.test(t) || ['edge', 'razr', 'one', 'fusion'].includes(t);
 
 function aliasHits(tt, brand) {
   const hits = [];
   const phrase = brand.phrase && brand.phrase.includes(' ') ? brand.phrase.split(' ') : null;
   tt.forEach((t, i) => {
     for (const a of brand.aliases || []) {
-      if (a instanceof RegExp ? a.test(t) && /^(g|e|edge|razr|g\d+|e\d+)/.test(tt[i + 1] || '') : t === a) { hits.push(i); return; }
+      if (typeof a !== 'string') continue;
+      // "moto*": a palavra só conta se vier seguida de um modelo ("moto g54", "moto edge")
+      if (a.endsWith('*') ? t === a.slice(0, -1) && MODEL_NEXT(tt[i + 1]) : t === a) { hits.push(i); return; }
     }
     if (phrase && phrase.every((p, j) => tt[i + j] === p)) hits.push(i);
   });
@@ -72,7 +125,7 @@ function aliasHits(tt, brand) {
  * @param item { title, seller, officialStore }
  * @returns {{ match: 'oficial'|'marca'|'compativel'|'outra-marca'|'ausente', reason: string }}
  */
-export function matchBrand(item, brand) {
+export function matchBrand(item, brand, others = null) {
   const tt = tokens(item.title);
   const hits = aliasHits(tt, brand);
   const sellerTk = tokens(item.seller || '');
@@ -87,7 +140,8 @@ export function matchBrand(item, brand) {
     return { match: 'outra-marca', reason: 'título indica imitação/similar' };
   }
   // Outra fabricante conhecida citada ANTES da marca (ex.: "Tênis Olympikus … Nike")
-  const otherBefore = tt.slice(0, i).find((t) => KNOWN_BRANDS.has(t) && !(brand.aliases || []).includes(t));
+  const otherSet = others || otherBrandWords(brand);
+  const otherBefore = tt.slice(0, i).find((t) => otherSet.has(t));
   // Mesmo com "para"/"compatível", é produto de OUTRA fabricante (ex.: "Fone Xiaomi … Para Samsung").
   if (otherBefore) return { match: 'outra-marca', reason: `outra marca (${otherBefore}) citada como fabricante` };
   const compat = before.some((t) => COMPAT_BEFORE.has(t)) || tt.slice(0, i).includes('compativel');

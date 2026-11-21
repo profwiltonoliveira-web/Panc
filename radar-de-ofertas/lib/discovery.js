@@ -13,7 +13,7 @@ import { buildSources, categorize } from './categories.js';
 import * as store from './storage.js';
 import { scoreAll, LABEL_RANK } from './scoring.js';
 import { isAccessoryTitle } from './product.js';
-import { BRANDS, resolveBrand, matchBrand, buildBrandSources, learnTerms, nextPageUrl } from './brands.js';
+import { SUGGESTIONS, resolveBrand, matchBrand, otherBrandWords, buildBrandSources, learnTerms, nextPageUrl } from './brands.js';
 import { CATEGORY_BY_ID } from './categories.js';
 
 const PAGE_DELAY_MS = 3000;
@@ -201,14 +201,14 @@ export function runJob(job) {
 }
 
 async function brandRegistry() {
-  const { customBrands } = await store.getBrandData();
-  return { ...BRANDS, ...customBrands };
+  const { brands } = await store.getBrandData();
+  return { ...SUGGESTIONS, ...brands }; // o cadastro do usuário prevalece sobre as sugestões
 }
 
 /** Fontes da tarefa: radar (+ marcas monitoradas), marca ou categoria. */
 async function jobSources(job, settings, stats) {
   if (job.kind === 'marca') {
-    const brand = resolveBrand(job.brand, (await store.getBrandData()).customBrands);
+    const brand = resolveBrand(job.brand, (await store.getBrandData()).brands); // qualquer nome: cadastro, sugestão ou livre
     return { sources: buildBrandSources(brand, { maxTerms: 8, maxPages: 2 }), brand };
   }
   if (job.kind === 'categoria') {
@@ -237,6 +237,9 @@ async function scan(mode, job = { kind: 'radar' }) {
   const sources = mode === 'auto' ? all.filter((s) => !(backoff[s.id] > now0)) : all;
   const reg = await brandRegistry();
   const brandOf = (id) => (js.brand && js.brand.id === id ? js.brand : reg[id] ? { id, ...reg[id] } : resolveBrand(id, reg));
+  const userBrands = (await store.getBrandData()).brands;
+  const othersCache = new Map();
+  const othersOf = (b) => { if (!othersCache.has(b.id)) othersCache.set(b.id, otherBrandWords(b, userBrands)); return othersCache.get(b.id); };
   const jobInfo = { kind: job.kind || 'radar', brand: js.brand ? js.brand.id : null, brandName: js.brand ? js.brand.name : null, category: job.category || null, label: js.brand ? `Marca: ${js.brand.name}` : js.label ? `Categoria: ${js.label}` : 'Radar' };
   const brandTally = { kept: 0, compat: 0, excluded: 0, categories: {}, learned: [] };
   const seenInScan = new Set();
@@ -328,7 +331,7 @@ async function scan(mode, job = { kind: 'radar' }) {
           const brand = brandOf(src.brand);
           const kept = [];
           for (const it of enriched) {
-            const m = matchBrand(it, brand);
+            const m = matchBrand(it, brand, othersOf(brand));
             if (m.match === 'outra-marca' || m.match === 'ausente') { rec.excluded = (rec.excluded || 0) + 1; brandTally.excluded++; continue; }
             if (m.match === 'compativel') { rec.compat = (rec.compat || 0) + 1; brandTally.compat++; } else { brandTally.kept++; brandTally.categories[it.category] = (brandTally.categories[it.category] || 0) + 1; }
             kept.push({ ...it, brands: { [brand.id]: m.match } });

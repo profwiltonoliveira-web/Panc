@@ -23,7 +23,9 @@ const CATALOG = {
   motorola: { own: ['Smartphone Motorola Moto G54 256GB', 'Motorola Edge 50 Fusion 256GB', 'Fone Motorola Moto Buds 600', 'Carregador Motorola TurboPower 30W Original'], compat: ['Película Para Moto G54'], other: ['Capacete Para Moto Fechado'] },
   philips: { own: ['Air Fryer Philips Walita 4,1L', 'Barbeador Philips OneBlade QP2724', 'Secador Philips Essential 2100W', 'Monitor Philips 24 Polegadas 241V8'], compat: ['Lâmina Refil Compatível Philips OneBlade'], other: [] },
   electrolux: { own: ['Geladeira Electrolux Frost Free 380L', 'Fogão Electrolux 4 Bocas', 'Micro-ondas Electrolux 34L', 'Aspirador Electrolux Ergorapido'], compat: ['Filtro Refil Para Purificador Electrolux'], other: [] },
-  lg: { own: ['Smart TV LG 55 Polegadas 4K 55UR8750', 'Geladeira LG Frost Free 423L', 'Lava E Seca LG 11kg VC4', 'Monitor LG UltraGear 24GN60R'], compat: ['Controle Remoto Para TV LG'], other: [] }
+  lg: { own: ['Smart TV LG 55 Polegadas 4K 55UR8750', 'Geladeira LG Frost Free 423L', 'Lava E Seca LG 11kg VC4', 'Monitor LG UltraGear 24GN60R'], compat: ['Controle Remoto Para TV LG'], other: [] },
+  // v0.6.1: marca FICTÍCIA, fora das sugestões e da lista de marcas conhecidas (prova que qualquer nome funciona)
+  aurora: { own: ['Chinelo Aurora Classic', 'Mochila Aurora Trilha 30L', 'Bermuda Aurora Surf', 'Camiseta Aurora Basic', 'Chinelo Aurora Slim'], compat: ['Cadarço Para Tênis Aurora'], other: ['Chinelo Havaianas Tipo Aurora'] }
 };
 const IRRELEVANT = 'Produto Genérico Sem Marca Qualquer';
 let idSeq = 5000000001;
@@ -114,6 +116,11 @@ function selfSigned() {
     await check(`marca ${id}: produtos da marca, sem mistura, acessórios separados, sem duplicados`, async () => {
       const t0 = Date.now();
       await runBrand(id === 'lg' ? 'LG' : id[0].toUpperCase() + id.slice(1));
+      if (id === 'aurora') {
+        const { brandSearches: bs, brands } = await storage();
+        assert.ok(!brands || !brands.aurora, 'não precisou de cadastro');
+        assert.ok(bs[0].learnedTerms.length >= 2, 'linhas de produto descobertas pelos títulos: ' + bs[0].learnedTerms);
+      }
       const s = await storage();
       const mine = Object.values(s.offers).filter((o) => o.brands && o.brands[id]);
       const own = mine.filter((o) => o.brands[id] !== 'compativel').map((o) => o.title).sort();
@@ -179,13 +186,57 @@ function selfSigned() {
     let s = await storage();
     assert.deepEqual(s.brandFavs, ['samsung']);
     assert.deepEqual(s.settings.monitorBrands, ['samsung']);
-    assert.ok(s.brandSearches.length >= 10);
-    assert.ok((await p.$$eval('#brandHistory li', (l) => l.length)) >= 10);
-    // marca digitada (não cadastrada) vira "minha marca" ao favoritar
+    assert.ok(s.brandSearches.length >= 11);
+    assert.ok((await p.$$eval('#brandHistory li', (l) => l.length)) >= 11);
+    // marca digitada (não cadastrada) entra no cadastro ao favoritar
     await p.fill('#brandInput', 'Havaianas'); await p.click('#brandFav'); await p.waitForTimeout(300);
     s = await storage();
-    assert.equal(s.customBrands.havaianas.name, 'Havaianas');
-    assert.match(await p.$eval('#myBrands', (e) => e.innerText), /Havaianas/);
+    assert.equal(s.brands.havaianas.name, 'Havaianas');
+    await p.click('#brandManager summary');
+    assert.match(await p.$eval('#brandRegistry', (e) => e.innerText), /Havaianas/);
+    // sugestões são só atalhos: clicar preenche a busca, NÃO cadastra
+    await p.click('#brandSuggestions >> text=Philips'); await p.waitForTimeout(200);
+    assert.equal(await p.inputValue('#brandInput'), 'Philips');
+    assert.ok(!(await storage()).brands.philips);
+  });
+
+  await check('cadastro de marcas pela interface: cadastrar, editar e excluir', async () => {
+    if (!(await p.$eval('#brandManager', (e) => e.open))) await p.click('#brandManager summary');
+    await p.fill('#bfName', 'Boreal Teste');
+    await p.fill('#bfAliases', 'boreal');
+    await p.fill('#bfTerms', 'tenis, mochila');
+    await p.click('#bfSave'); await p.waitForTimeout(400);
+    let s = await storage();
+    assert.deepEqual(s.brands['boreal-teste'].terms, ['tenis', 'mochila']);
+    assert.match(await p.$eval('#bfMsg', (e) => e.innerText), /cadastrada/);
+    // duplicado é recusado
+    await p.fill('#bfName', 'boreal teste'); await p.click('#bfSave'); await p.waitForTimeout(300);
+    assert.match(await p.$eval('#bfMsg', (e) => e.innerText), /Já existe/);
+    await p.fill('#bfName', '');
+    // editar
+    await p.locator('#brandRegistry li', { hasText: 'Boreal Teste' }).locator('text=Editar').click();
+    assert.equal(await p.inputValue('#bfName'), 'Boreal Teste');
+    await p.fill('#bfTerms', 'tenis, mochila, bone');
+    await p.click('#bfSave'); await p.waitForTimeout(400);
+    s = await storage();
+    assert.deepEqual(s.brands['boreal-teste'].terms, ['tenis', 'mochila', 'bone']);
+    assert.match(await p.$eval('#bfMsg', (e) => e.innerText), /atualizada/);
+    // excluir (com confirmação)
+    p.once('dialog', (d) => d.accept());
+    await p.locator('#brandRegistry li', { hasText: 'Boreal Teste' }).locator('text=Excluir').click();
+    await p.waitForTimeout(400);
+    s = await storage();
+    assert.equal(s.brands['boreal-teste'], undefined);
+    assert.doesNotMatch(await p.$eval('#brandRegistry', (e) => e.innerText), /Boreal Teste/);
+  });
+
+  await check('várias marcas monitoradas ao mesmo tempo (Samsung + Aurora pelo cadastro)', async () => {
+    await p.fill('#brandInput', 'Aurora'); await p.waitForTimeout(400);
+    assert.equal(await p.isChecked('#brandMonitor'), false, 'a caixa reflete a marca digitada, não a anterior');
+    await p.check('#brandMonitor'); await p.waitForTimeout(400);
+    const s = await storage();
+    assert.deepEqual(s.settings.monitorBrands, ['samsung', 'aurora']);
+    assert.match(await p.$eval('#brandMonitored', (e) => e.innerText), /Samsung[\s\S]*Aurora/);
   });
 
   await check('marca monitorada entra na varredura do radar (poucas consultas) e aparece nos destaques', async () => {
@@ -196,6 +247,8 @@ function selfSigned() {
     await waitJob('radar', clickedAt);
     const sam = hits.filter((h) => /samsung/.test(h.path)).map((h) => h.path);
     assert.ok(sam.length >= 1 && sam.length <= 3, sam.join());
+    const aur = hits.filter((h) => /aurora/.test(h.path)).map((h) => h.path);
+    assert.ok(aur.length >= 1 && aur.length <= 3, aur.join()); // 2ª marca monitorada também consultada
     await p.waitForTimeout(500);
     assert.match(await p.$eval('#highlights', (e) => e.innerText), /Achados de marcas monitoradas[\s\S]*Samsung/i); // h3 em maiúsculas via CSS
   });

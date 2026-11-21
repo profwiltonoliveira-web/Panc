@@ -90,7 +90,7 @@ export async function bytesInUse() {
 
 export async function exportJson() {
   // v0.6: inclui ofertas, varreduras e dados de marcas (para análise da classificação com dados reais)
-  const all = await area().get(['searches', 'prices', 'watch', 'offers', 'scans', 'sourceStats', 'brandFavs', 'customBrands', 'brandSearches', 'settings']);
+  const all = await area().get(['searches', 'prices', 'watch', 'offers', 'scans', 'sourceStats', 'brandFavs', 'brands', 'brandSearches', 'settings']);
   return JSON.stringify(all, null, 2);
 }
 
@@ -101,11 +101,63 @@ export function mergeBrands(a = {}, b = {}) {
   for (const [k, v] of Object.entries(b || {})) if (!out[k] || (BRAND_RANK[v] || 0) > (BRAND_RANK[out[k]] || 0)) out[k] = v;
   return out;
 }
-// brandFavs: [id]   customBrands: { id: { name, aliases, terms } }   brandSearches: [{ t, brand, name, ... }]
+// Cadastro dinâmico de marcas (local, chrome.storage):
+//   brands:     { id: { name, aliases[], phrase, terms[], createdAt, updatedAt } }   ← criar/editar/excluir
+//   brandFavs:  [id]          marcas favoritas
+//   settings.monitorBrands: [id]  marcas monitoradas (várias ao mesmo tempo)
+//   brandSearches: [{ t, brand, name, ... }]  histórico de buscas por marca
+// A BUSCA não exige cadastro: qualquer nome pode ser pesquisado.
 export async function getBrandData() {
-  const { brandFavs = [], customBrands = {}, brandSearches = [] } = await area().get(['brandFavs', 'customBrands', 'brandSearches']);
-  return { brandFavs, customBrands, brandSearches };
+  const { brandFavs = [], brands, customBrands, brandSearches = [] } = await area().get(['brandFavs', 'brands', 'customBrands', 'brandSearches']);
+  let reg = brands;
+  if (!reg) {
+    // migração da v0.6.0 ("customBrands" → "brands")
+    reg = {};
+    for (const [id, b] of Object.entries(customBrands || {})) reg[id] = { ...b, createdAt: Date.now(), updatedAt: Date.now() };
+    if (customBrands) { await area().set({ brands: reg }); await area().remove('customBrands'); }
+  }
+  return { brandFavs, brands: reg, customBrands: reg, brandSearches };
 }
+
+/**
+ * Cria (id ausente) ou edita (id existente) uma marca. O id é estável na edição.
+ * @param brand já normalizado (lib/brands.js → normalizeBrand)
+ * @returns { id, created }
+ */
+export async function saveBrand(id, brand, { mode = 'upsert' } = {}) {
+  const { brands } = await getBrandData();
+  const created = !id || !brands[id];
+  const newId = id || brand.id;
+  if (!newId) throw new Error('id da marca ausente');
+  // Cadastro NOVO nunca sobrescreve uma marca existente (mesmo id); só a edição altera.
+  if (mode === 'create' && brands[newId]) throw new Error(`Já existe uma marca chamada "${brands[newId].name}".`);
+  if (mode === 'edit' && !brands[newId]) throw new Error('Marca não encontrada no cadastro.');
+  // nomes duplicados (outra marca com o mesmo nome) não são permitidos
+  const dup = Object.entries(brands).find(([k, b]) => k !== newId && b.name.toLowerCase() === String(brand.name).toLowerCase());
+  if (dup) throw new Error(`Já existe uma marca chamada "${dup[1].name}".`);
+  const prev = brands[newId] || {};
+  brands[newId] = {
+    name: brand.name,
+    aliases: (brand.aliases || []).filter((a) => typeof a === 'string'),
+    phrase: brand.phrase || '',
+    terms: brand.terms || [],
+    createdAt: prev.createdAt || Date.now(),
+    updatedAt: Date.now()
+  };
+  await area().set({ brands });
+  return { id: newId, created };
+}
+/** Compatibilidade com a v0.6.0. */
+export async function saveCustomBrand(id, brand) { return saveBrand(id, { ...brand }); }
+
+/** Exclui do cadastro, dos favoritos e do monitoramento. O histórico de buscas é mantido. */
+export async function deleteBrand(id) {
+  const { brands, brandFavs } = await getBrandData();
+  delete brands[id];
+  const s = await getSettings();
+  await area().set({ brands, brandFavs: brandFavs.filter((x) => x !== id), settings: { ...s, monitorBrands: (s.monitorBrands || []).filter((x) => x !== id) } });
+}
+
 export async function toggleBrandFav(id) {
   const { brandFavs = [] } = await area().get('brandFavs');
   const i = brandFavs.indexOf(id);
@@ -113,10 +165,14 @@ export async function toggleBrandFav(id) {
   await area().set({ brandFavs });
   return i < 0;
 }
-export async function saveCustomBrand(id, brand) {
-  const { customBrands = {} } = await area().get('customBrands');
-  customBrands[id] = { name: brand.name, aliases: (brand.aliases || []).filter((a) => typeof a === 'string'), phrase: brand.phrase || '', terms: brand.terms || [] };
-  await area().set({ customBrands });
+
+/** Liga/desliga o monitoramento de uma marca (várias marcas podem ser monitoradas). */
+export async function setBrandMonitor(id, on) {
+  const s = await getSettings();
+  const set = new Set(s.monitorBrands || []);
+  if (on) set.add(id); else set.delete(id);
+  await saveSettings({ monitorBrands: [...set] });
+  return [...set];
 }
 export async function addBrandSearch(rec) {
   const { brandSearches = [] } = await area().get('brandSearches');

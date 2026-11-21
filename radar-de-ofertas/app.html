@@ -126,9 +126,26 @@
           <button type="button" id="brandSearch" class="primary">Buscar marca</button>
           <button type="button" id="brandFav" class="ghost" title="Salvar nas marcas favoritas">☆ Favoritar</button>
         </div>
+        <p class="hint">Pesquise <b>qualquer marca</b>: não é preciso cadastrar antes. Marcas fora do cadastro têm as linhas de produto descobertas pelos títulos encontrados.</p>
         <label class="chk"><input type="checkbox" id="brandMonitor"> Monitorar esta marca nas varreduras do radar (manuais e periódicas)</label>
-        <div class="brand-chips"><span class="muted">Marcas favoritas:</span> <span id="brandFavs"></span></div>
-        <div class="brand-chips"><span class="muted">Minhas marcas:</span> <span id="myBrands"></span></div>
+        <div class="brand-chips"><span class="muted">Favoritas:</span> <span id="brandFavs"></span></div>
+        <div class="brand-chips"><span class="muted">Monitorando:</span> <span id="brandMonitored"></span></div>
+        <div class="brand-chips"><span class="muted">Sugestões populares (atalhos):</span> <span id="brandSuggestions"></span></div>
+        <details id="brandManager" class="brand-manager">
+          <summary>Minhas marcas — cadastrar, editar, excluir</summary>
+          <form id="brandForm" class="brand-form" autocomplete="off">
+            <input type="hidden" id="bfId">
+            <label>Nome da marca <input id="bfName" maxlength="60" placeholder="ex.: Havaianas" required></label>
+            <label>Apelidos (opcional, separados por vírgula) <input id="bfAliases" maxlength="200" placeholder="ex.: redmi, poco  ·  use * para exigir modelo: moto*"></label>
+            <label>Linhas de produto (opcional, separadas por vírgula) <input id="bfTerms" maxlength="300" placeholder="ex.: chinelo, sandália, bolsa"></label>
+            <div class="row-actions" style="justify-content:flex-start">
+              <button type="submit" id="bfSave" class="primary">Cadastrar marca</button>
+              <button type="button" id="bfCancel" class="ghost" hidden>Cancelar edição</button>
+              <span id="bfMsg" class="muted"></span>
+            </div>
+          </form>
+          <ul id="brandRegistry" class="list"></ul>
+        </details>
         <div id="brandStatus" class="status" hidden></div>
         <div class="filters">
           <select id="bCat"><option value="">Todas as categorias</option></select>

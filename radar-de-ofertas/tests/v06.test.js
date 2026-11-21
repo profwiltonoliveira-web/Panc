@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { scoreOffer, scoreAll, classify, LABELS } from '../lib/scoring.js';
 import { assessPrice, assessDiscount, peerStats } from '../lib/pricing.js';
 import { classificationReport } from '../lib/report.js';
-import { BRANDS, resolveBrand, matchBrand, buildBrandSources, learnTerms, nextPageUrl } from '../lib/brands.js';
+import { SUGGESTIONS as BRANDS, resolveBrand, matchBrand, buildBrandSources, learnTerms, nextPageUrl } from '../lib/brands.js';
 import { categorize } from '../lib/categories.js';
 
 const mem = {};
@@ -122,7 +122,7 @@ const BRAND_CASES = {
   lg: { own: ['Smart TV LG 55 Polegadas 4K 55UR8750', 'Geladeira LG Frost Free 423L', 'Lava E Seca LG 11kg VC4', 'Monitor LG UltraGear 24GN60R'], compat: ['Controle Remoto Para TV LG'], other: [] }
 };
 
-test('as 10 marcas pedidas estão cadastradas e têm várias linhas de produto', () => {
+test('as 10 marcas pedidas existem como sugestões (atalhos) com várias linhas de produto', () => {
   for (const b of ['nike', 'adidas', 'samsung', 'jbl', 'xiaomi', 'mondial', 'motorola', 'philips', 'electrolux', 'lg']) {
     assert.ok(BRANDS[b], b);
     assert.ok(BRANDS[b].terms.length >= 4, b);

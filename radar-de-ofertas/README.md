@@ -1,4 +1,4 @@
-# Radar de Ofertas — caçador automático de promoções (v0.6.0)
+# Radar de Ofertas — caçador automático de promoções (v0.6.1)
 
 Extensão do Google Chrome (Manifest V3, JavaScript puro, sem backend e sem serviços pagos) que **descobre automaticamente** ofertas no Mercado Livre por categoria, registra os preços observados, **pontua as oportunidades** e gera um texto pronto para divulgar em grupos de promoções.
 
@@ -131,33 +131,25 @@ A v0.6 **não baixou limiares**: acrescentou evidências legítimas (equivalente
 ## 5.6 Busca por marca, produto e categoria (v0.6)
 Em **Busca manual** há três modalidades: **[Produto] [Marca] [Categoria]**. A busca por produto é a mesma de antes.
 
-**Marca**
-- **Marcas cadastradas**, com as linhas de produto pesquisadas:
-
-| Marca | Linhas pesquisadas |
-|---|---|
-| Nike | tênis, camiseta, bermuda, mochila, boné, jaqueta, chuteira, meia |
-| Adidas | tênis, camiseta, calça, mochila, chuteira, jaqueta, bola |
-| Samsung | celular, smart tv, tablet, geladeira, lava e seca, fone, monitor, smartwatch |
-| JBL | fone, caixa de som, soundbar, headset, partybox |
-| Xiaomi | celular, smartwatch, fone, aspirador robô, mi band, tv box, patinete |
-| Mondial | ventilador, air fryer, liquidificador, batedeira, cafeteira, ferro, chaleira |
-| Motorola | celular, moto g, moto edge, fone, carregador |
-| Philips | air fryer, barbeador, aparador, secador, fone, liquidificador, monitor, lâmpada |
-| Electrolux | geladeira, fogão, micro-ondas, lava e seca, aspirador, purificador, air fryer |
-| LG | smart tv, geladeira, lava e seca, micro-ondas, monitor, ar condicionado, soundbar |
-
-  Também estão cadastradas Apple, Lenovo, Britânia, Arno e Tramontina. A lista fica em `lib/brands.js` e é **expansível**.
-- **Marca digitada que não está na lista:** o Radar pesquisa a marca, **descobre as linhas de produto** pelos títulos encontrados e pesquisa essas linhas. Ao favoritar, ela entra em "Minhas marcas".
-- **Consultas:** a marca sozinha + uma por linha de produto, na página de busca do ML. A **página 2** (formato `_Desde_N`) só é pedida se a página 1 veio cheia (40 ou mais anúncios) e com anúncios novos. Há 3 s entre consultas.
-- **Verificação de cada anúncio:**
-  - **marca** ou **loja oficial**: produto da marca;
-  - **compatível**: acessório de terceiros "para" a marca, mostrado só se você marcar a opção;
-  - **outra marca**: imitação, "tipo X", "similar" ou outra fabricante citada antes; é descartado;
-  - **ausente**: não cita a marca; é descartado. Exemplo: "Capacete para moto" não é Motorola.
-- **Resultados:** sem duplicados, **organizados por categoria**, com filtros de categoria, preço e classe e ordenação por pontuação ou preço.
-- **Marcas favoritas**, **Minhas marcas** e **Histórico de buscas por marca**, com lidos, da marca, compatíveis, descartados e categorias.
-- **Monitorar marca:** as marcas marcadas entram em toda varredura do radar, manual e periódica, com no máximo 3 consultas por marca. Os achados aparecem em **Achados de marcas monitoradas** no painel.
+**Marca: qualquer marca, sem lista fixa (v0.6.1)**
+- **Pesquise qualquer nome.** O cadastro **não é exigido**. Para uma marca que não está cadastrada, o Radar pesquisa o nome e **descobre as linhas de produto** pelos títulos encontrados, pesquisando-as em seguida.
+- **Sugestões populares são só atalhos:** clicar preenche o campo de busca e não cadastra nada. São elas: Nike, Adidas, Samsung, JBL, Xiaomi, Mondial, Motorola, Philips, Electrolux, LG, Apple, Lenovo, Britânia, Arno e Tramontina.
+- **Minhas marcas (cadastro local)** permite **cadastrar, editar e excluir** marcas, com:
+  - **nome**: obrigatório, de 2 a 60 caracteres e sem repetir uma marca já cadastrada;
+  - **apelidos**: palavras que também identificam a marca, como Xiaomi → redmi, poco. Um apelido com `*` exige um modelo logo depois: `moto*` casa com "Moto G54" e "Moto Edge 40", mas não com "baú para moto 45 litros";
+  - **linhas de produto**: o que pesquisar, como tênis, mochila, boné. Se ficar vazio, as linhas são descobertas automaticamente.
+- **Precedência:** uma marca cadastrada vale mais que a sugestão de mesmo nome, então você pode editar os apelidos e as linhas da Xiaomi, por exemplo.
+- **Exclusão:** excluir uma marca também a retira dos favoritos e do monitoramento. As ofertas já encontradas continuam.
+- **Ao favoritar ou monitorar** uma marca digitada ou sugerida, ela entra no cadastro automaticamente.
+- **Favoritas e monitoramento:** é possível monitorar **várias marcas ao mesmo tempo**. Cada marca monitorada entra em toda varredura do radar, manual e periódica, com no máximo 3 consultas.
+- **Onde fica salvo:** no `chrome.storage` (chaves `brands`, `brandFavs`, `settings.monitorBrands` e `brandSearches`). O formato da v0.6.0 (`customBrands`) é migrado automaticamente.
+- **Consultas:** a marca sozinha + uma por linha de produto, na busca do ML. A **página 2** (`_Desde_N`) só é pedida se a página 1 veio cheia (40 ou mais anúncios) e com anúncios novos. Há **3 s entre quaisquer requisições**, inclusive entre buscas diferentes.
+- **Verificação de cada anúncio**, para **qualquer** marca:
+  - **marca** ou **loja oficial**: produto da fabricante;
+  - **compatível**: acessório de **terceiros** "para"/"compatível com" a marca; fica separado e oculto por padrão. **Nunca é contado como produto da fabricante.**
+  - **outra marca**: imitação ("tipo", "estilo", "similar", "réplica") ou outra fabricante citada antes. É descartado. Contam como "outras fabricantes" uma lista base de cerca de 150 marcas, as sugestões e **as marcas do seu cadastro**.
+  - **ausente**: não cita a marca; é descartado.
+- **Resultados:** sem duplicados, **organizados por categoria**, com filtros de categoria, preço e classe e ordenação por pontuação ou preço. Há histórico de buscas por marca.
 
 **Categoria**: lê até 3 páginas oficiais de ofertas da categoria escolhida.
 
@@ -254,7 +246,7 @@ lib/pricing.js        atratividade do preço e sinais (comprovado, anunciado, co
 lib/scoring.js        5 classes, dois indicadores (desconto real × atratividade), pesos e texto de divulgação
 lib/scoring-v05.js    classificação antiga (só para o relatório comparativo)
 lib/report.js         relatório de classificação sobre os dados armazenados
-lib/brands.js         marcas cadastradas, consultas por linha de produto, verificação de marca
+lib/brands.js         qualquer marca: sugestões (atalhos), validação do cadastro, consultas, verificação de marca
 lib/ml-parser.js      leitor de anúncios (json/dom/links) + diagnóstico; também injetado nas abas
 lib/storage.js        ofertas, histórico, favoritos, varreduras, configurações
 lib/analyzer.js       equivalência e classificação da busca manual
