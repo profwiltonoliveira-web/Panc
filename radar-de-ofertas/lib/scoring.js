@@ -1,182 +1,133 @@
-// Pontuação de oportunidades do radar (0–100) e agrupamento de produtos equivalentes.
+// Pontuação de oportunidades (0–100) com pesos configuráveis.
 //
-// Regras centrais:
-//  - "Desconto comprovado" só existe com HISTÓRICO observado pela extensão (≥ 2 observações
-//    anteriores, em dias distintos). Preço "de" anunciado pela loja é "desconto anunciado".
-//  - Preço baixo ≠ desconto: estar abaixo da mediana de produtos equivalentes vale pontos
-//    próprios ("preço competitivo"), mas não é chamado de desconto.
-//  - "Excelente" exige desconto comprovado. Sinais contraditórios viram "Desconto suspeito".
+// Dois eixos SEPARADOS:
+//   - Atratividade do preço (lib/pricing.js): preço vs. equivalentes e vs. histórico do anúncio.
+//   - Comprovação do desconto: só existe com histórico observado (≥ 2 dias).
+// Classificação de PROMOÇÃO (rótulo) exige desconto: comprovado (excelente/boa) ou anunciado
+// coerente (boa). Preço baixo sem desconto NÃO vira promoção: aparece como sinal de preço
+// ("Preço competitivo"/"Preço excepcionalmente baixo"), e a pontuação reflete isso.
 
-import { tokens, summarizeHistory, median } from './analyzer.js';
+import { summarizeHistory } from './analyzer.js';
+import { parseProduct, groupEquivalents, isAccessoryTitle } from './product.js';
+import { assessPrice, peerStats, SIGNAL_TEXT } from './pricing.js';
+
+export { isAccessoryTitle };
 
 export const LABELS = {
   excelente: 'Excelente oportunidade',
   boa: 'Boa oportunidade',
-  regular: 'Preço regular',
+  regular: 'Sem promoção confirmada',
   suspeito: 'Desconto suspeito'
 };
 export const LABEL_RANK = { suspeito: 0, regular: 1, boa: 2, excelente: 3 };
 
-// Palavras que, no início do título, indicam acessório/peça (não o produto principal).
-const ACCESSORY_LEAD = new Set(['capa', 'capinha', 'case', 'pelicula', 'suporte', 'carregador', 'cabo', 'adaptador', 'protetor', 'estojo', 'refil', 'peca', 'pecas', 'tela', 'display', 'bateria', 'almofada', 'almofadas', 'ponteira', 'ponteiras', 'skin', 'adesivo', 'controle', 'pulseira', 'carcaca']);
-const NOISE = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'com', 'para', 'pra', 'o', 'a', 'em', 'no', 'na', 'novo', 'nova', 'original', 'lacrado', 'oferta', 'promocao', 'envio', 'imediato', 'frete', 'gratis', 'garantia', 'nf', 'nota', 'fiscal', 'pronta', 'entrega', 'cor', 'preto', 'preta', 'branco', 'branca', 'azul', 'vermelho', 'vermelha', 'verde', 'rosa', 'cinza', 'prata', 'dourado', 'grafite', 'roxo', 'lilas', 'amarelo', 'bege', 'marrom', 'titanio', 'unidade', 'un', 'pc', 'pcs']);
+// Pesos padrão (somam 100). Configuráveis no painel.
+export const DEFAULT_WEIGHTS = { preco: 35, comprovacao: 30, anunciado: 10, vendedor: 10, frete: 8, condicao: 7 };
+export const WEIGHT_LABELS = {
+  preco: 'Atratividade do preço',
+  comprovacao: 'Desconto comprovado',
+  anunciado: 'Desconto anunciado',
+  vendedor: 'Vendedor',
+  frete: 'Frete',
+  condicao: 'Condição'
+};
 
-/** true se o título descreve um acessório/peça ("Capa para iPhone", "Película Galaxy", "Compatível com…"). */
-export function isAccessoryTitle(title) {
-  const tt = tokens(title).filter((t) => !NOISE.has(t) || t === 'para');
-  if (!tt.length) return false;
-  if (ACCESSORY_LEAD.has(tt[0])) return true;
-  if (tt.slice(0, 6).includes('compativel')) return true;
-  // "Película de vidro para ...", "Cabo usb para ..."
-  const para = tt.indexOf('para');
-  return para > 0 && para <= 3 && tt.slice(0, para).some((t) => ACCESSORY_LEAD.has(t));
-}
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 
-/** Conjunto de termos que identifica o produto (sem cores e ruído). */
-export function productTokens(title) {
-  return new Set(tokens(title).filter((t) => !NOISE.has(t) && t.length > 1).slice(0, 10));
-}
-
-function jaccard(a, b) {
-  let inter = 0;
-  for (const x of a) if (b.has(x)) inter++;
-  return inter / (a.size + b.size - inter || 1);
-}
-
-/**
- * Agrupa ofertas equivalentes (mesma categoria, mesmo tipo acessório/produto, títulos semelhantes).
- * Variantes que mudam o produto (pro, max, ultra, 128gb…) entram nos termos, então reduzem a semelhança.
- * @returns Map id -> clusterId
- */
-export function clusterOffers(offers, threshold = 0.6) {
-  const clusters = []; // { key, cat, acc, tokens, ids }
-  const out = new Map();
-  for (const o of offers) {
-    const tk = productTokens(o.title);
-    const acc = isAccessoryTitle(o.title);
-    let best = null, bestSim = threshold;
-    for (const c of clusters) {
-      if (c.cat !== o.category || c.acc !== acc) continue;
-      const sim = jaccard(tk, c.tokens);
-      if (sim >= bestSim) { best = c; bestSim = sim; }
-    }
-    if (!best) { best = { key: 'c' + clusters.length, cat: o.category, acc, tokens: tk, ids: [] }; clusters.push(best); }
-    best.ids.push(o.id);
-    out.set(o.id, best.key);
+export function normalizeWeights(w) {
+  const out = {};
+  for (const k of Object.keys(DEFAULT_WEIGHTS)) {
+    const v = Number(w && w[k]);
+    out[k] = Number.isFinite(v) && v >= 0 && v <= 100 ? v : DEFAULT_WEIGHTS[k];
   }
   return out;
 }
-
-const round = (n) => Math.round(n);
 
 /**
  * Pontua uma oferta.
  * @param o oferta normalizada
  * @param hist resumo do histórico (summarizeHistory) ou null
- * @param peers { size, median } do grupo de equivalentes (ou null)
+ * @param peers peerStats() dos equivalentes (sem o próprio anúncio) ou null
+ * @param weights pesos (DEFAULT_WEIGHTS)
  */
-export function scoreOffer(o, hist, peers) {
-  const reasons = [];
-  const flags = [];
-  let score = 0;
-  const claimed = o.originalPrice > o.price ? (1 - o.price / o.originalPrice) * 100 : null;
+export function scoreOffer(o, hist, peers, weights = DEFAULT_WEIGHTS) {
+  const w = normalizeWeights(weights);
+  const pa = assessPrice(o, hist, peers || { n: 0, median: null });
+  const s = pa.signals;
+  const suspicious = s.includes('desconto-artificial') || s.includes('preco-anomalo');
 
-  // 1) Desconto comprovado pelo histórico
-  let provenPct = null, previousPrice = null;
-  if (hist && hist.count >= 2 && hist.days >= 2) {
-    provenPct = (1 - o.price / hist.avg) * 100;
-    previousPrice = hist.avg;
-    if (provenPct >= 1) {
-      score += Math.min(40, provenPct * 1.6);
-      reasons.push(`Desconto comprovado: ${provenPct.toFixed(0)}% abaixo da média observada (R$ ${fmt(hist.avg)}, ${hist.count} obs. em ${hist.days} dias).`);
-      if (o.price <= hist.min) { score += 5; reasons.push('Menor preço já registrado pelo Radar.'); }
-    } else if (provenPct <= -3) {
-      reasons.push(`Preço ${Math.abs(provenPct).toFixed(0)}% ACIMA da média observada (R$ ${fmt(hist.avg)}).`);
-    } else reasons.push(`Preço dentro da média observada (R$ ${fmt(hist.avg)}).`);
-  } else if (hist) {
-    reasons.push(`Histórico ainda curto (${hist.count} obs. em ${hist.days} dia): desconto não comprovado.`);
-  } else {
-    reasons.push('Sem histórico: o desconto não pode ser comprovado ainda.');
-  }
+  // Subnotas 0..1
+  const sub = {
+    preco: pa.attractiveness == null || suspicious ? 0 : pa.attractiveness / 100,
+    comprovacao: pa.provenPct != null && s.includes('desconto-comprovado') ? clamp(pa.provenPct / 25) : 0,
+    anunciado: s.includes('desconto-anunciado') && !suspicious ? clamp(pa.claimedPct / 50) : 0,
+    vendedor: clamp(0.3 + (o.officialStore ? 0.5 : 0) + (o.rating != null && o.reviews >= 10 ? (o.rating >= 4.5 ? 0.2 : o.rating < 3.8 ? -0.3 : 0) : 0)),
+    frete: o.freeShipping ? 1 : o.shipping != null ? 0.5 : 0.2,
+    condicao: o.condition === 'usado' || o.condition === 'recondicionado' ? 0 : 1
+  };
+  const total = Object.values(w).reduce((a, b) => a + b, 0) || 1;
+  let score = Math.round(Object.keys(w).reduce((acc, k) => acc + w[k] * sub[k], 0) / total * 100);
+  if (suspicious) score = Math.min(score, 30);
 
-  // 2) Desconto anunciado pela loja (peso menor; checado contra o histórico)
-  if (claimed != null) {
-    if (hist && hist.max < o.originalPrice * 0.9) {
-      flags.push(`Preço "de" R$ ${fmt(o.originalPrice)} nunca foi observado (máximo visto: R$ ${fmt(hist.max)}).`);
-    } else if (!hist && claimed >= 70) {
-      flags.push(`Desconto anunciado de ${claimed.toFixed(0)}% sem histórico que o comprove.`);
-    } else {
-      score += Math.min(18, claimed * 0.35);
-      reasons.push(`Desconto anunciado pela loja: ${claimed.toFixed(0)}% (de R$ ${fmt(o.originalPrice)}).` + (claimed >= 50 ? ' Alto — confira.' : ''));
-    }
-  }
-
-  // 3) Preço frente a produtos equivalentes (preço competitivo, não "desconto")
-  let vsPeers = null;
-  if (peers && peers.size >= 3 && peers.median) {
-    vsPeers = (o.price / peers.median - 1) * 100;
-    if (vsPeers <= -60) flags.push(`Preço ${Math.abs(vsPeers).toFixed(0)}% abaixo de ${peers.size} anúncios semelhantes: pode ser outro produto, peça ou anúncio irregular.`);
-    else if (vsPeers <= -5) { score += Math.min(15, -vsPeers * 0.5); reasons.push(`${Math.abs(vsPeers).toFixed(0)}% mais barato que a mediana de ${peers.size} anúncios semelhantes.`); }
-    else if (vsPeers >= 10) reasons.push(`${vsPeers.toFixed(0)}% mais caro que a mediana de ${peers.size} anúncios semelhantes.`);
-  }
-
-  // 4) Vendedor
-  if (o.officialStore) { score += 8; reasons.push('Loja oficial.'); }
-  if (o.rating != null && o.reviews >= 10) {
-    if (o.rating >= 4.5) { score += 4; reasons.push(`Avaliação ${o.rating} (${o.reviews} avaliações).`); }
-    else if (o.rating < 3.8) { score -= 6; reasons.push(`Avaliação baixa: ${o.rating}.`); }
-  }
-
-  // 5) Condição, frete e qualidade do anúncio
-  if (o.condition === 'usado' || o.condition === 'recondicionado') { score -= 10; reasons.push(`Produto ${o.condition}.`); }
-  if (o.freeShipping) { score += 7; reasons.push('Frete grátis.'); }
-  if (o.image) score += 2;
-  if ((o.badges || []).some((b) => /DIA|REL[AÂ]MPAGO/.test(b))) { score += 3; reasons.push('Selo do ML: ' + o.badges.join(', ') + '.'); }
-
-  score = Math.max(0, Math.min(100, round(score)));
-
-  // Classificação
+  // Rótulo de promoção
   let label;
-  const evidence = (provenPct != null && provenPct >= 3) || (claimed != null && claimed >= 20 && !flags.length) || (vsPeers != null && vsPeers <= -20);
-  if (flags.length) { label = 'suspeito'; reasons.unshift(...flags); score = Math.min(score, 30); }
-  // Limiares na escala real dos pontos (anúncio típico: 10–60).
-  else if (provenPct != null && provenPct >= 10 && score >= 40) label = 'excelente';
-  else if (evidence && score >= 12) label = 'boa';
+  const proven = pa.provenPct != null && s.includes('desconto-comprovado') ? pa.provenPct : null;
+  const aboveMarket = s.includes('acima-do-mercado');
+  if (suspicious) label = 'suspeito';
+  else if (proven != null && proven >= 10 && !aboveMarket) label = 'excelente';
+  // Desconto anunciado só vira "boa" se houver ALGUMA referência que não o contradiga
+  // (histórico ou ≥ 3 equivalentes); sem referência é "oportunidade não confirmada".
+  else if ((proven != null && proven >= 3) || (s.includes('desconto-anunciado') && !s.includes('nao-confirmada') && pa.claimedPct >= 20 && !aboveMarket)) label = 'boa';
   else label = 'regular';
 
-  // Desconto a exibir: comprovado tem prioridade sobre o anunciado
+  // Desconto a exibir/divulgar: comprovado > anunciado coerente; suspeito não exibe desconto.
   let discountPct = null, discountKind = null;
-  if (flags.length) { /* oferta suspeita: nenhum desconto é exibido/divulgado */ }
-  else if (provenPct != null && provenPct >= 1) { discountPct = provenPct; discountKind = 'comprovado'; }
-  else if (claimed != null && !flags.length) { discountPct = claimed; discountKind = 'anunciado'; }
+  if (!suspicious && proven != null) { discountPct = proven; discountKind = 'comprovado'; }
+  else if (!suspicious && s.includes('desconto-anunciado')) { discountPct = pa.claimedPct; discountKind = 'anunciado'; }
+
+  const reasons = [...pa.reasons];
+  if (o.officialStore) reasons.push('Loja oficial.');
+  if (o.rating != null && o.reviews >= 10) reasons.push(`Avaliação ${o.rating} (${o.reviews} avaliações).`);
+  if ((o.badges || []).length) reasons.push('Selos do ML: ' + o.badges.join(', ') + '.');
 
   return {
     score, label, labelText: LABELS[label], reasons,
+    subscores: Object.fromEntries(Object.entries(sub).map(([k, v]) => [k, Math.round(v * 100)])),
+    priceInfo: pa, priceSignal: pa.primary, priceSignalText: pa.primaryText,
+    attractiveness: pa.attractiveness,
     discountPct, discountKind,
-    previousPrice: discountKind === 'comprovado' ? previousPrice : null,
-    vsPeers, accessory: isAccessoryTitle(o.title)
+    previousPrice: discountKind === 'comprovado' ? pa.histAvg : null,
+    vsPeers: pa.vsPeersPct,
+    accessory: isAccessoryTitle(o.title)
   };
 }
 
 /**
- * Pontua todas as ofertas usando o histórico de preços e os grupos de equivalentes.
- * @param offers array de ofertas
- * @param prices histórico { id: { points } }
+ * Pontua todas as ofertas usando histórico e grupos de equivalentes.
+ * Duplicados (mesmo ID) são unificados antes; equivalentes de vendedores diferentes continuam
+ * ofertas separadas, mas servem de referência umas para as outras.
  */
-export function scoreAll(offers, prices = {}, now = Date.now()) {
-  const clusters = clusterOffers(offers);
-  const byCluster = new Map();
-  for (const o of offers) {
-    const k = clusters.get(o.id);
-    if (!byCluster.has(k)) byCluster.set(k, []);
-    byCluster.get(k).push(o.price);
+export function scoreAll(offers, prices = {}, now = Date.now(), weights = DEFAULT_WEIGHTS) {
+  const unique = [...new Map(offers.map((o) => [o.id, o])).values()];
+  const withProduct = unique.map((o) => ({ ...o, product: parseProduct(o.title, o.condition) }));
+  const groups = groupEquivalents(withProduct);
+  const byGroup = new Map();
+  for (const o of withProduct) {
+    const k = groups.get(o.id);
+    if (!byGroup.has(k)) byGroup.set(k, []);
+    byGroup.get(k).push(o);
   }
-  return offers.map((o) => {
-    const k = clusters.get(o.id);
-    const ps = byCluster.get(k);
+  return withProduct.map((o) => {
+    const k = groups.get(o.id);
+    const others = byGroup.get(k).filter((x) => x.id !== o.id).map((x) => x.price);
     const hist = summarizeHistory(prices[o.id], now);
-    return { ...o, cluster: k, peers: ps.length, ...scoreOffer(o, hist, { size: ps.length, median: median(ps) }) };
+    return { ...o, cluster: k, peers: others.length, ...scoreOffer(o, hist, peerStats(others), weights) };
   });
+}
+
+/** Mantida por compatibilidade: agrupa ofertas equivalentes (id -> chave). */
+export function clusterOffers(offers) {
+  return groupEquivalents(offers.map((o) => ({ ...o, product: parseProduct(o.title, o.condition) })));
 }
 
 /** Link limpo para divulgação (sem parâmetros de rastreamento; mantém wid/item_id). */
@@ -191,7 +142,7 @@ export function cleanLink(link) {
   } catch { return link; }
 }
 
-/** Texto pronto para grupos de promoções. Só afirma o que foi comprovado. */
+/** Texto pronto para grupos de promoções. Só afirma o que foi observado/comprovado. */
 export function shareText(o) {
   const lines = [`🔥 ${o.title}`, ''];
   lines.push(`💰 R$ ${fmt(o.price)}` + (o.freeShipping ? ' · Frete grátis 🚚' : ''));
@@ -200,11 +151,17 @@ export function shareText(o) {
   } else if (o.discountKind === 'anunciado') {
     lines.push(`🏷️ De R$ ${fmt(o.originalPrice)} por R$ ${fmt(o.price)} (${o.discountPct.toFixed(0)}% OFF anunciado pela loja)`);
   }
+  // Comparação com equivalentes: só quando há base razoável (≥ 4 anúncios equivalentes).
+  if ((o.priceSignal === 'preco-excepcional' || o.priceSignal === 'preco-competitivo') && o.vsPeers != null && o.peers >= 4) {
+    lines.push(`📊 ${Math.abs(o.vsPeers).toFixed(0)}% abaixo da mediana de ${o.peers} anúncios equivalentes que encontramos`);
+  }
   if (o.seller) lines.push(`🏪 ${o.seller}${o.officialStore ? ' (loja oficial)' : ''}`);
   if (o.condition === 'usado' || o.condition === 'recondicionado') lines.push(`⚠️ Produto ${o.condition}`);
   lines.push('', `👉 ${cleanLink(o.link)}`, '', '_Preço e disponibilidade sujeitos a alteração._');
   return lines.join('\n');
 }
+
+export { SIGNAL_TEXT };
 
 export function fmt(n) {
   return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

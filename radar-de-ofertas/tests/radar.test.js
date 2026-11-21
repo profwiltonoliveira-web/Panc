@@ -9,13 +9,13 @@ const NOW = Date.UTC(2026, 10, 21, 12);
 const offer = (id, title, price, extra = {}) => ({ id, title, price, originalPrice: null, freeShipping: false, condition: null, image: 'https://http2.mlstatic.com/x.jpg', category: 'celulares', seller: null, officialStore: false, badges: [], rating: null, reviews: null, link: `https://produto.mercadolivre.com.br/MLB-${id.replace(/\D/g, '')}-x-_JM`, ...extra });
 const hist = (avg, min, max, days = 3, count = 3) => ({ avg, min, max, days, count });
 
-test('preço baixo sem histórico NÃO vira desconto comprovado nem "excelente"', () => {
-  const r = scoreOffer(offer('MLB1', 'Fone X', 50), null, { size: 5, median: 100 });
+test('preço baixo sem histórico NÃO vira desconto comprovado nem promoção', () => {
+  // v0.5: antes virava "boa"; o requisito agora é não classificar produto barato como promoção.
+  const r = scoreOffer(offer('MLB1', 'Fone X', 50), null, { n: 5, median: 100 });
   assert.equal(r.discountKind, null);
-  assert.notEqual(r.label, 'excelente');
-  assert.equal(r.label, 'boa'); // preço competitivo frente a semelhantes
-  assert.ok(r.reasons.some((x) => /mais barato que a mediana/.test(x)));
-  assert.ok(r.reasons.some((x) => /não pode ser comprovado/.test(x)));
+  assert.equal(r.label, 'regular');
+  assert.equal(r.priceSignal, 'preco-excepcional'); // o preço baixo aparece como SINAL DE PREÇO
+  assert.ok(r.reasons.some((x) => /abaixo da mediana de 5 anúncios equivalentes/.test(x)));
 });
 
 test('desconto anunciado é rotulado como anunciado, não comprovado', () => {
@@ -23,7 +23,11 @@ test('desconto anunciado é rotulado como anunciado, não comprovado', () => {
   assert.equal(r.discountKind, 'anunciado');
   assert.equal(Math.round(r.discountPct), 33);
   assert.equal(r.previousPrice, null);
-  assert.equal(r.label, 'boa');
+  // v0.5: sem histórico e sem equivalentes, o anúncio é "não confirmado" (antes: "boa")
+  assert.equal(r.label, 'regular');
+  assert.equal(r.priceSignal, 'nao-confirmada');
+  // com equivalentes que não o contradizem, vira "boa"
+  assert.equal(scoreOffer(offer('MLB1', 'Air Fryer Y', 300, { originalPrice: 450 }), null, { n: 4, median: 380 }).label, 'boa');
 });
 
 test('desconto comprovado pelo histórico → excelente', () => {
@@ -52,7 +56,7 @@ test('desconto anunciado ≥ 70% sem histórico → suspeito', () => {
 });
 
 test('preço absurdamente abaixo de semelhantes → suspeito', () => {
-  assert.equal(scoreOffer(offer('MLB1', 'iPhone 15 128GB', 900), null, { size: 6, median: 5000 }).label, 'suspeito');
+  assert.equal(scoreOffer(offer('MLB1', 'iPhone 15 128GB', 900), null, { n: 6, median: 5000 }).label, 'suspeito');
 });
 
 test('preço acima da média observada não ganha pontos de desconto', () => {
@@ -91,7 +95,7 @@ test('agrupamento: equivalentes juntos; acessório e variante separados', () => 
   const s = scoreAll(offers, {}, NOW);
   assert.equal(s.find((o) => o.id === 'MLB4').accessory, true);
   assert.equal(s.find((o) => o.id === 'MLB4').label === 'suspeito', false); // acessório não é comparado ao celular
-  assert.equal(s.find((o) => o.id === 'MLB1').peers, 3);
+  assert.equal(s.find((o) => o.id === 'MLB1').peers, 2); // v0.5: conta só os OUTROS equivalentes
 });
 
 test('scoreAll usa histórico gravado (ignora observações da última hora)', () => {

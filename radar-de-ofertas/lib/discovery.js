@@ -12,10 +12,41 @@
 import { buildSources, categorize } from './categories.js';
 import * as store from './storage.js';
 import { scoreAll, LABEL_RANK } from './scoring.js';
+import { isAccessoryTitle } from './product.js';
 
 const PAGE_DELAY_MS = 3000;
 const BACKOFF_MS = 6 * 60 * 60 * 1000;
 const NAV_TIMEOUT_MS = 30000;
+// Paginação só continua se a página anterior foi produtiva (evita requisições inúteis).
+const NEXT_PAGE_MIN_ITEMS = 20;
+const NEXT_PAGE_MIN_UNIQUE = 0.4;
+// Fonte improdutiva (≥ 3 varreduras seguidas sem anúncios) é pulada no automático por 24 h.
+const UNPRODUCTIVE_RUNS = 3;
+const UNPRODUCTIVE_SKIP_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Ordena as fontes: a página geral primeiro; depois as mais produtivas (anúncios ÚNICOS por
+ * varredura, histórico acumulado); fontes nunca lidas mantêm a ordem original. Páginas 2+
+ * ficam logo após a página anterior da mesma fonte.
+ */
+export function prioritizeSources(list, stats = {}) {
+  const base = (id) => id.replace(/-p\d+$/, '');
+  const yieldOf = (id) => { const s = stats[base(id)]; return s && s.runs ? s.unique / s.runs : null; };
+  const firstPages = list.filter((s) => !/-p\d+$/.test(s.id));
+  const idx = new Map(firstPages.map((s, i) => [s.id, i]));
+  firstPages.sort((a, b) => {
+    if (a.id === 'ofertas') return -1;
+    if (b.id === 'ofertas') return 1;
+    const ya = yieldOf(a.id), yb = yieldOf(b.id);
+    if (ya == null && yb == null) return idx.get(a.id) - idx.get(b.id);
+    if (ya == null) return -1; // nunca lida: dá a chance
+    if (yb == null) return 1;
+    return yb - ya || idx.get(a.id) - idx.get(b.id);
+  });
+  const out = [];
+  for (const f of firstPages) out.push(f, ...list.filter((s) => base(s.id) === f.id && s.id !== f.id));
+  return out;
+}
 
 let running = null;
 let stopRequested = false;
@@ -143,8 +174,11 @@ async function scan(mode) {
   const allowTab = mode === 'manual' ? settings.allowTabManual : settings.allowTabAuto;
   const { backoff = {} } = await chrome.storage.local.get('backoff');
   const now0 = Date.now();
-  const all = buildSources(settings);
+  const stats = await store.getSourceStats();
+  const all = prioritizeSources(buildSources(settings), stats);
   const sources = mode === 'auto' ? all.filter((s) => !(backoff[s.id] > now0)) : all;
+  const seenInScan = new Set();
+  const byBase = new Map(); // resultado da página anterior de cada fonte
   const scanRec = { t: now0, mode, finished: null, sources: [], found: 0, newOffers: 0, stoppedReason: null };
   const session = new TabSession();
   let tabBlocked = false, directFailStreak = 0;
@@ -155,8 +189,24 @@ async function scan(mode) {
     for (let i = 0; i < sources.length; i++) {
       if (stopRequested) { scanRec.stoppedReason = 'interrompido pelo usuário'; break; }
       const src = sources[i];
+      const baseId = src.id.replace(/-p\d+$/, '');
+      const rec = { id: src.id, name: src.name, url: src.url, status: 'erro', count: 0, unique: 0, added: 0, accessories: 0, method: null, error: null, diagnostic: null };
+      // Pula paginação improdutiva e fontes improdutivas (só no automático) — sem requisição.
+      const prev = byBase.get(baseId);
+      if (prev && (prev.count < NEXT_PAGE_MIN_ITEMS || prev.unique / (prev.count || 1) < NEXT_PAGE_MIN_UNIQUE)) {
+        rec.status = 'pulada'; rec.skipped = true;
+        rec.error = `página anterior pouco produtiva (${prev.count} anúncios, ${prev.unique} novos)`;
+        scanRec.sources.push(rec);
+        continue;
+      }
+      const st = stats[baseId];
+      if (mode === 'auto' && !/-p\d+$/.test(src.id) && st && st.emptyRuns >= UNPRODUCTIVE_RUNS && now0 - st.lastRun < UNPRODUCTIVE_SKIP_MS) {
+        rec.status = 'pulada'; rec.skipped = true;
+        rec.error = `sem anúncios nas últimas ${st.emptyRuns} varreduras; nova tentativa em até 24 h`;
+        scanRec.sources.push(rec);
+        continue;
+      }
       await state({ message: `Lendo ${src.name}…`, current: src.name });
-      const rec = { id: src.id, name: src.name, url: src.url, status: 'erro', count: 0, method: null, error: null, diagnostic: null };
       let items = [];
 
       // 1) leitura direta
@@ -197,16 +247,23 @@ async function scan(mode) {
       }
 
       if (items.length) {
+        // Duplicados dentro da própria página (mesmo ID) contam uma vez.
+        items = [...new Map(items.map((it) => [it.id, it])).values()];
         const enriched = items.map((it) => ({ ...it, category: src.category || categorize(it.title) }));
         const { added } = await store.mergeOffers(enriched, src);
         rec.status = 'ok';
         rec.count = items.length;
+        rec.unique = items.filter((it) => !seenInScan.has(it.id)).length; // não vistos em fontes anteriores desta varredura
+        rec.added = added;                                                  // nunca vistos antes pelo Radar
+        rec.accessories = items.filter((it) => isAccessoryTitle(it.title)).length;
+        items.forEach((it) => seenInScan.add(it.id));
         scanRec.found += items.length;
         scanRec.newOffers += added;
       } else if (rec.status !== 'bloqueado') {
         rec.status = rec.diagnostic && rec.diagnostic.tipoDePagina === 'sem-resultados' ? 'vazio' : 'erro';
       }
       if (rec.status === 'bloqueado' || (rec.status === 'erro' && /HTTP 403|verifica/.test(rec.error || ''))) backoff[src.id] = Date.now() + BACKOFF_MS;
+      byBase.set(baseId, rec);
       scanRec.sources.push(rec);
       await store.saveScan(scanRec);
 
@@ -220,6 +277,7 @@ async function scan(mode) {
     await session.close();
     scanRec.finished = Date.now();
     await store.saveScan(scanRec);
+    try { await store.updateSourceStats(scanRec); } catch { /* estatística não pode derrubar a varredura */ }
     await chrome.storage.local.set({ backoff });
     await store.setRadarState({ running: false, mode, startedAt: now0, finishedAt: scanRec.finished, total: sources.length, done: scanRec.sources.length, found: scanRec.found, newOffers: scanRec.newOffers, needsUser: scanRec.needsUser || null, stoppedReason: scanRec.stoppedReason, message: summaryMessage(scanRec) });
   }
@@ -228,7 +286,9 @@ async function scan(mode) {
 
 function summaryMessage(s) {
   const ok = s.sources.filter((x) => x.status === 'ok').length;
-  let m = `${s.found} anúncios lidos em ${ok} de ${s.sources.length} fontes; ${s.newOffers} novos.`;
+  const read = s.sources.filter((x) => !x.skipped).length;
+  const skipped = s.sources.length - read;
+  let m = `${s.found} anúncios lidos em ${ok} de ${read} fontes consultadas; ${s.newOffers} novos.` + (skipped ? ` ${skipped} fonte(s) pulada(s) por baixa produtividade.` : '');
   if (s.stoppedReason) m += ' Varredura interrompida: ' + s.stoppedReason + '.';
   if (s.needsUser) m += ' ' + s.needsUser.message;
   return m;
@@ -237,6 +297,7 @@ function summaryMessage(s) {
 /** Ofertas novas desta varredura com classificação mínima (para notificações). */
 export async function newGoodOffers(scanRec, minLabel = 'boa') {
   const { offers, prices } = await store.getRadar();
-  const list = scoreAll(Object.values(offers), prices);
+  const settings = await store.getSettings();
+  const list = scoreAll(Object.values(offers), prices, Date.now(), settings.weights || undefined);
   return list.filter((o) => o.firstSeen >= scanRec.t && LABEL_RANK[o.label] >= LABEL_RANK[minLabel]).sort((a, b) => b.score - a.score);
 }

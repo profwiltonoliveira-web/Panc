@@ -95,7 +95,7 @@ function selfSigned() {
     assert.ok(s.scans[0].sources.filter((x) => x.status === 'ok').every((x) => x.method === 'direta'));
     assert.ok(await p.$$eval('#topOffers .offer', (l) => l.length) > 0);
     const src = (await p.$eval('#radarSources', (e) => e.innerText)).replace(/\s+/g, ' ');
-    assert.match(src, /✅ Ofertas: Celulares e telefones 3 anúncios \(leitura direta\)/);
+    assert.match(src, /✅ Ofertas: Celulares e telefones 3 anúncios, 2 únicos, 2 novos \(leitura direta\)/); // a capa já veio de "até R$ 100"
     assert.match(src, /⚪ Ofertas: Informática/); // categoria sem anúncios
   });
 
@@ -128,7 +128,9 @@ function selfSigned() {
     assert.match(await card.locator('.o-meta').innerText(), /Samsung · loja oficial · Frete grátis/);
     assert.equal(await card.locator('.o-title').getAttribute('href'), 'https://produto.mercadolivre.com.br/MLB-7000000001-x-_JM');
     assert.match(await card.locator('img').getAttribute('src'), /^https:\/\/http2\.mlstatic\.com\//);
-    assert.equal(await card.locator('.badge').innerText(), 'Boa oportunidade');
+    // v0.5: só 1 equivalente e sem histórico → anúncio de 31% OFF é "não confirmado", não promoção
+    assert.equal(await card.locator('.badge').innerText(), 'Sem promoção confirmada');
+    assert.equal(await card.locator('.sig').innerText(), 'Oportunidade não confirmada');
     await card.locator('.o-copy').click();
     const txt = await p.evaluate(() => navigator.clipboard.readText());
     assert.match(txt, /🔥 Smartphone Samsung Galaxy A15 128GB Azul/);
@@ -216,6 +218,22 @@ function selfSigned() {
     assert.equal(Object.keys(offers).length, 10);
   });
 
+  await check('v0.5: página 2 de fonte pouco produtiva é pulada sem requisição', async () => {
+    mode = 'direct';
+    await p.evaluate(() => chrome.storage.local.set({ settings: { pages: 2, categories: ['celulares'], allowTabManual: true }, backoff: {} }));
+    hits.length = 0;
+    await p.click('[data-tab=radar]');
+    await p.click('#radarStart');
+    await p.waitForFunction(() => /Radar em andamento/.test(document.querySelector('#radarStart').textContent), null, { timeout: 10000 });
+    await waitIdle();
+    const sc = (await storage()).scans[0];
+    const p2 = sc.sources.filter((x) => /-p2$/.test(x.id));
+    assert.equal(p2.length, 2);
+    assert.ok(p2.every((x) => x.status === 'pulada' && /pouco produtiva/.test(x.error)), JSON.stringify(p2));
+    assert.ok(!hits.some((h) => /page=2/.test(h.url)), 'nenhuma requisição de página 2');
+    assert.match(await p.$eval('#radarStatus', (e) => e.innerText), /pulada\(s\) por baixa produtividade/);
+  });
+
   await check('monitoramento periódico: configuração cria alarme (mín. 30 min) e desligar remove', async () => {
     await p.selectOption('#setInterval', '60');
     await p.waitForTimeout(500);
@@ -231,6 +249,41 @@ function selfSigned() {
     await p.click('[data-tab=historico]');
     await p.waitForTimeout(300);
     assert.ok((await p.$$eval('#scanHistory li', (l) => l.length)) >= 3);
+  });
+
+  await check('v0.5: auditoria de fontes (consultas, únicos, acessórios) e uso de armazenamento', async () => {
+    await p.waitForSelector('#sourceAudit tr:nth-child(2)');
+    const txt = await p.$eval('#sourceAudit', (e) => e.innerText);
+    assert.match(txt, /Ofertas: Celulares e telefones/);
+    const { sourceStats } = await storage();
+    const cel = sourceStats['cat-celulares'];
+    assert.ok(cel.runs >= 1 && cel.items >= 3 && cel.accessories >= 1, JSON.stringify(cel));
+    // 1ª varredura: Eletrônicos trouxe 2 anúncios, mas a TV já tinha vindo da página geral → 1 único
+    const first = (await storage()).scans.at(-1).sources.find((x) => x.id === 'cat-eletronicos');
+    assert.deepEqual([first.count, first.unique], [2, 1]);
+    assert.match(await p.$eval('#storageInfo', (e) => e.innerText), /Em uso: .* MB de 10\.00 MB/);
+  });
+
+  await check('v0.5: card mostra sinal de preço e subnotas separadas', async () => {
+    await p.click('[data-tab=ofertas][data-group=""]');
+    const card = p.locator('#offerList .offer', { hasText: 'Galaxy A15 128GB Azul' });
+    assert.equal(await card.locator('.sig').innerText(), 'Oportunidade não confirmada');
+    assert.match(await card.locator('.o-sub').innerText(), /Preço: .* · Comprovação do desconto: 0\/100 · Desconto anunciado: \d+\/100/);
+  });
+
+  await check('v0.5: pesos configuráveis alteram a nota e são salvos', async () => {
+    await p.click('[data-tab=radar]');
+    await p.click('.weights summary');
+    const card = () => p.locator('#topOffers .offer', { hasText: 'Galaxy A15 128GB Azul' }).locator('.o-score').innerText();
+    const before = await card();
+    await p.fill('#w-anunciado', '100'); await p.press('#w-anunciado', 'Tab');
+    await p.waitForTimeout(500);
+    const after = await card();
+    assert.notEqual(before, after);
+    assert.equal((await storage()).settings.weights.anunciado, 100);
+    await p.click('#weightsReset');
+    await p.waitForTimeout(300);
+    assert.equal(await p.inputValue('#w-anunciado'), '10');
   });
 
   await check('busca manual continua disponível', async () => {

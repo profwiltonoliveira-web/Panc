@@ -3,7 +3,7 @@
 // envia comandos e acompanha o progresso pelo chrome.storage.
 
 import { CATEGORIES, CATEGORY_BY_ID, GROUPS } from './lib/categories.js';
-import { scoreAll, shareText, LABEL_RANK, cleanLink, fmt } from './lib/scoring.js';
+import { scoreAll, shareText, LABEL_RANK, cleanLink, fmt, DEFAULT_WEIGHTS, WEIGHT_LABELS, normalizeWeights } from './lib/scoring.js';
 import * as store from './lib/storage.js';
 
 const $ = (s) => document.querySelector(s);
@@ -12,6 +12,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 let view = { name: 'radar', group: '' };
 let scored = [];
 let watch = {};
+let weights = { ...DEFAULT_WEIGHTS };
 
 // ---------- comandos ----------
 $('#radarStart').addEventListener('click', async () => {
@@ -33,7 +34,33 @@ async function loadSettings() {
   $('#setTabManual').checked = !!s.allowTabManual;
   $('#setTabAuto').checked = !!s.allowTabAuto;
   $('#setNotify').checked = !!s.notify;
+  weights = normalizeWeights(s.weights || DEFAULT_WEIGHTS);
+  renderWeights();
 }
+
+// Pesos configuráveis da pontuação (0–100 cada; a nota é a média ponderada das subnotas).
+function renderWeights() {
+  const box = $('#weightsBox');
+  box.replaceChildren(...Object.keys(DEFAULT_WEIGHTS).map((k) => {
+    const row = el('label', 'w-row');
+    const inp = el('input');
+    inp.type = 'number'; inp.min = '0'; inp.max = '100'; inp.step = '1'; inp.value = String(weights[k]); inp.id = 'w-' + k;
+    inp.addEventListener('change', async () => {
+      weights = normalizeWeights({ ...weights, [k]: Number(inp.value) });
+      inp.value = String(weights[k]);
+      await store.saveSettings({ weights });
+      refresh();
+    });
+    row.append(el('span', '', WEIGHT_LABELS[k]), inp);
+    return row;
+  }));
+}
+$('#weightsReset').addEventListener('click', async () => {
+  weights = { ...DEFAULT_WEIGHTS };
+  await store.saveSettings({ weights: null });
+  renderWeights();
+  refresh();
+});
 $('#setInterval').addEventListener('change', (e) => store.saveSettings({ interval: Number(e.target.value) }));
 $('#setPages').addEventListener('change', (e) => store.saveSettings({ pages: Number(e.target.value) }));
 $('#setTabManual').addEventListener('change', (e) => store.saveSettings({ allowTabManual: e.target.checked }));
@@ -75,11 +102,11 @@ function renderSources(scans) {
   const ul = $('#radarSources');
   const s = scans[0];
   if (!s) { ul.replaceChildren(el('li', 'muted', 'Nenhuma varredura ainda.')); return; }
-  const icon = { ok: '✅', vazio: '⚪', bloqueado: '⛔', erro: '⚠️' };
+  const icon = { ok: '✅', vazio: '⚪', bloqueado: '⛔', erro: '⚠️', pulada: '⏭️' };
   ul.replaceChildren(...s.sources.map((x) => {
     const li = el('li');
     li.append(el('span', '', `${icon[x.status] || '•'} ${x.name}`));
-    li.append(el('span', 'muted', x.status === 'ok' ? ` ${x.count} anúncios (${x.method === 'aba' ? 'aba' : 'leitura direta'})` : ` ${x.error || x.status}`));
+    li.append(el('span', 'muted', x.status === 'ok' ? ` ${x.count} anúncios, ${x.unique} únicos, ${x.added} novos (${x.method === 'aba' ? 'aba' : 'leitura direta'})` : ` ${x.error || x.status}`));
     return li;
   }));
 }
@@ -103,6 +130,7 @@ function applyFilters(list) {
   const cond = $('#oCond').value;
   const lbl = $('#oLabel').value;
   const noAcc = $('#oAcc').checked;
+  const signal = $('#oSignal').value;
   let out = list.filter((o) => {
     if (view.group && (CATEGORY_BY_ID[o.category] || CATEGORY_BY_ID.outros).group !== view.group) return false;
     if (cat && o.category !== cat) return false;
@@ -116,6 +144,7 @@ function applyFilters(list) {
     if (lbl === 'suspeito' && o.label !== 'suspeito') return false;
     if (lbl && lbl !== 'suspeito' && LABEL_RANK[o.label] < LABEL_RANK[lbl]) return false;
     if (noAcc && o.accessory) return false;
+    if (signal && !(o.priceInfo && o.priceInfo.signals.includes(signal))) return false;
     return true;
   });
   const sort = $('#oSort').value;
@@ -157,7 +186,14 @@ function offerCard(o) {
   const badge = node.querySelector('.badge');
   badge.textContent = o.labelText;
   badge.classList.add(o.label);
-  node.querySelector('.o-score').textContent = `${o.score}/100`;
+  node.querySelector('.o-score').textContent = `Nota ${o.score}/100`;
+  const sig = node.querySelector('.sig');
+  sig.textContent = o.priceSignalText;
+  sig.classList.add(o.priceSignal);
+  const sb = o.subscores || {};
+  node.querySelector('.o-sub').textContent = `Preço: ${o.attractiveness == null ? 'sem referência' : o.attractiveness + '/100'}` +
+    ` (${o.peers} equivalente${o.peers === 1 ? '' : 's'})` +
+    ` · Comprovação do desconto: ${sb.comprovacao || 0}/100 · Desconto anunciado: ${sb.anunciado || 0}/100`;
   const tags = [];
   if (o.accessory) tags.push('acessório');
   for (const b of o.badges || []) tags.push(b.toLowerCase());
@@ -192,7 +228,7 @@ function renderOffers() {
   }
 }
 
-['#oText', '#oCat', '#oMin', '#oMax', '#oDisc', '#oProven', '#oFree', '#oCond', '#oLabel', '#oAcc', '#oSort'].forEach((s) =>
+['#oText', '#oCat', '#oMin', '#oMax', '#oDisc', '#oProven', '#oSignal', '#oFree', '#oCond', '#oLabel', '#oAcc', '#oSort'].forEach((s) =>
   $(s).addEventListener(s === '#oText' || s === '#oMin' || s === '#oMax' ? 'input' : 'change', renderOffers));
 
 // ---------- histórico de varreduras ----------
@@ -237,17 +273,40 @@ async function copy(text, btn, ok) {
 async function refresh() {
   const r = await store.getRadar();
   watch = r.watch;
-  scored = scoreAll(Object.values(r.offers), r.prices);
+  scored = scoreAll(Object.values(r.offers), r.prices, Date.now(), weights);
   renderState(r.radarState, r.scans);
   renderSources(r.scans);
   renderScans(r.scans);
   renderOffers();
+  if (view.name === 'historico') renderAudit();
+}
+
+// ---------- auditoria de fontes e armazenamento ----------
+async function renderAudit() {
+  const stats = await store.getSourceStats();
+  const t = $('#sourceAudit');
+  const rows = Object.entries(stats).sort((a, b) => (b[1].unique / (b[1].runs || 1)) - (a[1].unique / (a[1].runs || 1)));
+  const head = el('tr');
+  for (const h of ['Fonte', 'Consultas', 'Com anúncios', 'Anúncios/consulta', 'Únicos/consulta', '% únicos', 'Novos (total)', '% acessórios', 'Última']) head.append(el('th', '', h));
+  t.replaceChildren(head, ...(rows.length ? rows.map(([, s]) => {
+    const tr = el('tr');
+    const per = (x) => (s.runs ? (x / s.runs).toFixed(1) : '—');
+    const pc = (x, d) => (d ? ((x / d) * 100).toFixed(0) + '%' : '—');
+    for (const v of [s.name, s.runs, s.okRuns, per(s.items), per(s.unique), pc(s.unique, s.items), s.added, pc(s.accessories, s.items), s.lastStatus || '—']) tr.append(el('td', '', String(v)));
+    return tr;
+  }) : [(() => { const tr = el('tr'); const td = el('td', 'muted', 'Nenhuma varredura ainda.'); td.colSpan = 9; tr.append(td); return tr; })()]));
+  const r = await store.storageReport();
+  const mb = (b) => (b / 1048576).toFixed(2) + ' MB';
+  const big = Object.entries(r.perKey).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${mb(v)}`).join(', ');
+  $('#storageInfo').textContent = `Em uso: ${mb(r.used)} de ${mb(r.quota)} (${((r.used / r.quota) * 100).toFixed(1)}%) · ${r.counts.ofertas} ofertas, ${r.counts.historicos} históricos de preço, ${r.counts.favoritos} favoritos, ${r.counts.varreduras} varreduras · maiores: ${big || '—'}.` +
+    ' A poda automática começa em 70% e reduz até 55%, sem apagar favoritos.' +
+    (r.lastPrune ? ` Última poda: ${new Date(r.lastPrune.t).toLocaleString('pt-BR')} (${mb(r.lastPrune.before)} → ${mb(r.lastPrune.after)}).` : '');
 }
 
 let pending = null;
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (!['offers', 'radarState', 'scans', 'watch', 'prices'].some((k) => k in changes)) return;
+  if (!['offers', 'radarState', 'scans', 'watch', 'prices', 'sourceStats'].some((k) => k in changes)) return;
   clearTimeout(pending);
   pending = setTimeout(refresh, 250); // agrupa várias gravações seguidas
 });
@@ -256,7 +315,7 @@ document.addEventListener('radar:tab', (e) => {
   view = e.detail;
   if (view.name === 'ofertas') fillCategorySelect();
   renderOffers();
-  if (view.name === 'historico') store.getRadar().then((r) => renderScans(r.scans));
+  if (view.name === 'historico') { store.getRadar().then((r) => renderScans(r.scans)); renderAudit(); }
 });
 
 // Aba ativa no carregamento (app.js pode ter trocado de aba antes deste módulo carregar).

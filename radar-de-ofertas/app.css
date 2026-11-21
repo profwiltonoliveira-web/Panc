@@ -140,3 +140,18 @@ button.primary:disabled { opacity: .6; cursor: progress; }
 .o-tags { font-size: 11px; color: var(--muted); text-transform: lowercase; }
 .o-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
 .o-copy { font-size: 12px; white-space: nowrap; }
+
+/* ---------- v0.5 ---------- */
+.sig { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--regular-bg); color: var(--regular); }
+.sig.desconto-comprovado, .sig.preco-excepcional { background: var(--excelente-bg); color: var(--excelente); }
+.sig.preco-competitivo, .sig.desconto-anunciado { background: var(--boa-bg); color: var(--boa); }
+.sig.desconto-artificial, .sig.preco-anomalo, .sig.acima-do-mercado { background: var(--suspeito-bg); color: var(--suspeito); }
+.o-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.weights { margin: 10px 0; font-size: 13px; }
+.weights summary { cursor: pointer; font-weight: 600; }
+.weights .w-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; }
+.weights input { width: 64px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+.table-wrap { overflow-x: auto; }
+table.audit { border-collapse: collapse; width: 100%; font-size: 12px; background: var(--panel); }
+table.audit th, table.audit td { border-bottom: 1px solid var(--border); padding: 4px 6px; text-align: right; white-space: nowrap; }
+table.audit th:first-child, table.audit td:first-child { text-align: left; }
